@@ -1,0 +1,23 @@
+{
+  "name": "lingot",
+  "version": "1.0.0",
+  "description": "The standard library for AI agents. Intelligence blocks that make Cursor, Windsurf, and Claude Code measurably better.",
+  "type": "module",
+  "bin": {
+    "lingot": "./bin/lingot.js"
+  },
+  "scripts": {
+    "test": "node bin/lingot.js list"
+  },
+  "keywords": ["ai", "agents", "context", "mcp", "cursor", "windsurf", "claude", "intelligence-blocks", "llm"],
+  "author": "Lingot <hello@lingot.sh>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lingot-sh/lingot"
+  },
+  "homepage": "https://lingot.sh",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}
