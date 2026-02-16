@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.0
+
+- `lingot diff <name>` — compare local vs registry version of a block
+- **Bug fix:** `lingot add` now works correctly (was failing with 404 on manifest download)
+- Fixed R2 URL for manifest.json in registry API
+
 ## 1.5.2
 
 - `lingot doctor --min-score <N>` — configurable pass threshold for CI pipelines
