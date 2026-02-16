@@ -1,5 +1,8 @@
 # lingot
 
+[![npm version](https://img.shields.io/npm/v/lingot.svg)](https://www.npmjs.com/package/lingot)
+[![license](https://img.shields.io/npm/l/lingot.svg)](https://github.com/felixdigit/lingot/blob/main/LICENSE)
+
 The context compiler for AI coding agents. Intelligence blocks that make Cursor, Windsurf, and Claude Code measurably better.
 
 **Baseline pass rate without context: 52%. With a single Lingot block: 99.7%.**
