@@ -151,7 +151,7 @@ async function main() {
 
     case 'list':
     case 'ls':
-      await list();
+      await list(rawArgs);
       break;
 
     case 'inspect':
