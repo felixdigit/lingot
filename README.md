@@ -21,8 +21,10 @@ npx lingot add drizzle-orm stripe-billing tailwind-v4
 # Score your project's context health
 npx lingot doctor
 
-# Compile blocks into .cursorrules or CLAUDE.md
-npx lingot compile --target cursor
+# Compile blocks for your agent
+npx lingot compile --target cursor    # .cursorrules
+npx lingot compile --target windsurf  # .windsurfrules
+npx lingot compile --target claude    # CLAUDE.md
 ```
 
 ## What Are Intelligence Blocks?
@@ -43,11 +45,15 @@ Load blocks into your AI agent's context to get measurably better output. Our Dr
 | Command | Description |
 |---------|-------------|
 | `lingot add <name>` | Install a block from the registry |
+| `lingot remove <name>` | Remove installed blocks |
+| `lingot update [name...]` | Check for and install block updates |
 | `lingot init` | Scan package.json and suggest relevant blocks |
 | `lingot list` | List installed blocks with token counts |
 | `lingot inspect <name>` | Show block details, version, and scope |
+| `lingot search <query>` | Search the registry |
 | `lingot doctor` | Score context health 0-100, detect Pink Elephant Tax |
-| `lingot compile` | Compile blocks into agent-ready formats |
+| `lingot compile` | Compile for Cursor, Claude Code, Windsurf |
+| `lingot stats` | Show installed blocks summary and token usage |
 | `lingot serve` | Start local MCP server for installed blocks |
 
 ## `lingot doctor`
@@ -71,6 +77,9 @@ Compiles installed blocks into the format your agent expects:
 ```bash
 # Generate .cursorrules files (one per block)
 npx lingot compile --target cursor
+
+# Generate a single .windsurfrules file
+npx lingot compile --target windsurf
 
 # Generate a single CLAUDE.md with all blocks
 npx lingot compile --target claude
