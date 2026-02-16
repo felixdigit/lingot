@@ -22,7 +22,7 @@ Each block contains 4 files of curated, token-optimized context:
 - **knowledge.md** — Dense domain knowledge, mental models, architecture patterns
 - **rules.xml** — ALWAYS/NEVER heuristic rules that prevent hallucinations
 - **examples.yaml** — Few-shot input/output examples for common tasks
-- **manifest.json** — Metadata, version, scope coverage
+- **lingot.json** — Metadata, version, dependencies, scope coverage
 
 Load blocks into your AI agent's context to get measurably better output. Our Supabase Auth block improved LLM accuracy from 35.3% to 100% on domain-specific tasks.
 

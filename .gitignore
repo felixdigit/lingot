@@ -1,1 +1,5 @@
 node_modules/
+trials/
+scripts/
+.env
+.DS_Store
