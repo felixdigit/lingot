@@ -51,7 +51,7 @@ Usage:
   lingot update [name...]        Check for and install block updates
   lingot stats                   Show summary of installed blocks and token usage
   lingot doctor [dir]            Lint blocks for context quality (Pink Elephant, dilution, collisions)
-  lingot compile [dir]           Compile blocks into agent-ready format (Cursor .mdc or CLAUDE.md)
+  lingot compile [dir]           Compile blocks into agent-ready format (Cursor, Claude, Windsurf)
   lingot search <query>          Search the registry for blocks
   lingot serve                   Start local MCP server for installed blocks
   lingot version                 Show CLI version
@@ -63,7 +63,7 @@ Flags:
   --name <slug>                  Override block slug for mine command
   --registry <url>               Target registry for login command
   --key <api-key>                API key for login (skip interactive prompt)
-  --target <cursor|claude>       Target format for compile (default: claude)
+  --target <cursor|claude|windsurf> Target format for compile (default: claude)
   --report                       Output machine-readable JSON from doctor
   --verbose                      Show detailed output (prompts, responses, reasons)
 
@@ -84,6 +84,7 @@ Examples:
   npx lingot doctor
   npx lingot doctor ./packages --report
   npx lingot compile --target cursor
+  npx lingot compile --target windsurf
   npx lingot compile --target claude --output ./CLAUDE.md
 
 Registry: https://lingot.sh

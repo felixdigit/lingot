@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+
+- `lingot compile --target windsurf` — compile blocks into `.windsurfrules` format
+- Windsurf generates a single monolithic rules file (project root)
+- All three major AI editors now supported: Cursor, Claude Code, Windsurf
+
 ## 1.4.3
 
 - `lingot list --json` — machine-readable JSON output for CI/scripting
