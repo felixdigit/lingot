@@ -1,6 +1,10 @@
 # lingot
 
-The standard library for AI agents. Intelligence blocks that make Cursor, Windsurf, and Claude Code measurably better at writing code.
+The context compiler for AI coding agents. Intelligence blocks that make Cursor, Windsurf, and Claude Code measurably better.
+
+**Baseline pass rate without context: 52%. With a single Lingot block: 99.7%.**
+
+That's from 6,400+ controlled assertions across 4 experiments. Same model, same prompts. The only variable was context. [Read the research →](https://lingot.sh/research)
 
 ## Quick Start
 
@@ -13,18 +17,26 @@ npx lingot init
 
 # Install multiple blocks
 npx lingot add drizzle-orm stripe-billing tailwind-v4
+
+# Score your project's context health
+npx lingot doctor
+
+# Compile blocks into .cursorrules or CLAUDE.md
+npx lingot compile --target cursor
 ```
 
 ## What Are Intelligence Blocks?
 
 Each block contains 4 files of curated, token-optimized context:
 
-- **knowledge.md** — Dense domain knowledge, mental models, architecture patterns
-- **rules.xml** — ALWAYS/NEVER heuristic rules that prevent hallucinations
-- **examples.yaml** — Few-shot input/output examples for common tasks
-- **lingot.json** — Metadata, version, dependencies, scope coverage
+| File | Purpose |
+|------|---------|
+| `knowledge.md` | Dense domain knowledge, mental models, current API patterns |
+| `rules.xml` | Affirmative heuristic rules that prevent hallucinations |
+| `examples.yaml` | Few-shot input/output examples for common tasks |
+| `lingot.json` | Metadata, version, dependencies, scope coverage |
 
-Load blocks into your AI agent's context to get measurably better output. Our Supabase Auth block improved LLM accuracy from 35.3% to 100% on domain-specific tasks.
+Load blocks into your AI agent's context to get measurably better output. Our Drizzle ORM block improved code accuracy from 52% to 99.7% across 5 eval scenarios.
 
 ## Commands
 
@@ -32,27 +44,87 @@ Load blocks into your AI agent's context to get measurably better output. Our Su
 |---------|-------------|
 | `lingot add <name>` | Install a block from the registry |
 | `lingot init` | Scan package.json and suggest relevant blocks |
-| `lingot list` | List installed blocks |
-| `lingot inspect <name>` | Show block details and token counts |
+| `lingot list` | List installed blocks with token counts |
+| `lingot inspect <name>` | Show block details, version, and scope |
+| `lingot doctor` | Score context health 0-100, detect Pink Elephant Tax |
+| `lingot compile` | Compile blocks into agent-ready formats |
 | `lingot serve` | Start local MCP server for installed blocks |
 
-## 40+ Blocks Available
+## `lingot doctor`
+
+Scores your project's context files on three clinical metrics:
+
+- **LINT-001: Pink Elephant Tax** — Negative rules (NEVER, AVOID, DON'T) that inject deprecated tokens into the model's working memory. Our data shows each violation costs ~2.7% accuracy.
+- **LINT-002: Attention Dilution** — Context blocks that exceed the signal-to-noise sweet spot (>8,000 tokens).
+- **LINT-003: Latent Collision** — Blocks that will interfere when co-loaded due to overlapping scope domains.
+
+```bash
+npx lingot doctor                    # Score installed blocks
+npx lingot doctor ./my-rules-dir     # Score a specific directory
+npx lingot doctor --report           # Machine-readable JSON for CI
+```
+
+## `lingot compile`
+
+Compiles installed blocks into the format your agent expects:
+
+```bash
+# Generate .cursorrules files (one per block)
+npx lingot compile --target cursor
+
+# Generate a single CLAUDE.md with all blocks
+npx lingot compile --target claude
+```
+
+The compiler uses **Semantic Lens ordering** — knowledge first (the map), then rules (the guardrails), then examples (the demonstrations). This matches our experimental findings: knowledge carries 95%+ of the signal.
+
+## 77 Blocks Available
 
 Auth, frontend, backend, database, AI SDKs, payments, testing, DevOps, and more.
 
 Browse all blocks at [lingot.sh](https://lingot.sh).
 
+### Popular blocks
+
+```bash
+npx lingot add drizzle-orm        # ORM with correct v3 patterns
+npx lingot add supabase-auth      # Auth + RLS (v2.0, 4,440 tokens)
+npx lingot add tailwind-v4        # CSS-first config, no tailwind.config.js
+npx lingot add next-auth          # NextAuth.js v5 with App Router
+npx lingot add stripe-billing     # Webhooks, subscriptions, checkout
+npx lingot add prisma             # Schema design + Client extensions
+npx lingot add zod                # Schema validation + type inference
+```
+
 ## MCP Integration
 
-Start the local MCP server to expose installed blocks to any MCP-compatible agent:
+Expose installed blocks to any MCP-compatible agent:
 
 ```bash
 lingot serve
 ```
 
-This provides two tools:
-- `search_packages` — Find relevant blocks by topic or domain
+Provides two tools:
+- `search_packages` — Find relevant blocks by topic
 - `get_package_context` — Load block content into agent context
+
+## The Research
+
+We ran clinical trials to measure how context affects AI code generation:
+
+| Context Level | Pass Rate | vs Baseline |
+|---|---|---|
+| No context | 52.0% | — |
+| Rules only | 69.9% | +17.9pp |
+| Knowledge only | **99.7%** | **+47.7pp** |
+| Full block | 97.0% | +45.0pp |
+
+Key findings:
+- **Structured knowledge beats raw docs** — A 4,000-token block outperforms 40,000 tokens of copy-pasted documentation
+- **Negative rules backfire** — "NEVER use X" makes X _more_ salient to the model (the Pink Elephant Tax)
+- **Context has carrying capacity** — Some block combinations create asymmetric interference (Latent Hijacking)
+
+Full methodology, data, and analysis: [lingot.sh/research](https://lingot.sh/research)
 
 ## License
 
