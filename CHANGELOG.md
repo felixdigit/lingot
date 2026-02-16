@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.1
+
+- `lingot outdated` — check for blocks with newer registry versions (dry-run)
+
 ## 1.6.0
 
 - `lingot diff <name>` — compare local vs registry version of a block

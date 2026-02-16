@@ -51,6 +51,7 @@ Usage:
   lingot mine <url>              Auto-mine an intelligence block from a documentation URL
   lingot remove <name> [names...] Remove installed blocks
   lingot update [name...]        Check for and install block updates
+  lingot outdated                Check for outdated blocks (no install)
   lingot stats                   Show summary of installed blocks and token usage
   lingot doctor [dir]            Lint blocks for context quality (Pink Elephant, dilution, collisions)
   lingot compile [dir]           Compile blocks into agent-ready format (Cursor, Claude, Windsurf)
@@ -226,7 +227,12 @@ async function main() {
     case 'update':
     case 'upgrade': {
       const updateNames = rawArgs.filter(a => !a.startsWith('--'));
-      await update(updateNames.length > 0 ? updateNames : undefined);
+      await update(updateNames.length > 0 ? updateNames : undefined, { dryRun: false });
+      break;
+    }
+
+    case 'outdated': {
+      await update(undefined, { dryRun: true });
       break;
     }
 
