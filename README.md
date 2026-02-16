@@ -135,6 +135,17 @@ Key findings:
 
 Full methodology, data, and analysis: [lingot.sh/research](https://lingot.sh/research)
 
+## Contributing
+
+Want to create a block for your favorite library? See the [contribution guide](CONTRIBUTING.md).
+
+```bash
+npx lingot create my-block
+# Edit the generated files, then validate:
+npx lingot validate ./my-block
+npx lingot doctor ./my-block
+```
+
 ## License
 
 MIT
