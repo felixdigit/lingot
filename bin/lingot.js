@@ -16,6 +16,7 @@ import { doctor } from '../lib/doctor.js';
 import { compile } from '../lib/compile.js';
 import { remove } from '../lib/remove.js';
 import { update } from '../lib/update.js';
+import { stats } from '../lib/stats.js';
 import { PACKAGES_DIR, REGISTRY_URL } from '../lib/config.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -48,6 +49,7 @@ Usage:
   lingot mine <url>              Auto-mine an intelligence block from a documentation URL
   lingot remove <name> [names...] Remove installed blocks
   lingot update [name...]        Check for and install block updates
+  lingot stats                   Show summary of installed blocks and token usage
   lingot doctor [dir]            Lint blocks for context quality (Pink Elephant, dilution, collisions)
   lingot compile [dir]           Compile blocks into agent-ready format (Cursor .mdc or CLAUDE.md)
   lingot search <query>          Search the registry for blocks
@@ -220,6 +222,11 @@ async function main() {
       await update(updateNames.length > 0 ? updateNames : undefined);
       break;
     }
+
+    case 'stats':
+    case 'info':
+      await stats();
+      break;
 
     case 'doctor':
     case 'lint':
