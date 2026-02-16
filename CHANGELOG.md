@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.1
+
+- `lingot create <name>` — scaffold a new intelligence block with templates
+- Templates pass `lingot validate` out of the box (15/15 checks)
+
 ## 1.5.0
 
 - `lingot compile --target windsurf` — compile blocks into `.windsurfrules` format

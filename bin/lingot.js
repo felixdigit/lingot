@@ -17,6 +17,7 @@ import { compile } from '../lib/compile.js';
 import { remove } from '../lib/remove.js';
 import { update } from '../lib/update.js';
 import { stats } from '../lib/stats.js';
+import { create } from '../lib/create.js';
 import { PACKAGES_DIR, REGISTRY_URL } from '../lib/config.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -52,6 +53,7 @@ Usage:
   lingot stats                   Show summary of installed blocks and token usage
   lingot doctor [dir]            Lint blocks for context quality (Pink Elephant, dilution, collisions)
   lingot compile [dir]           Compile blocks into agent-ready format (Cursor, Claude, Windsurf)
+  lingot create <name>           Scaffold a new intelligence block
   lingot search <query>          Search the registry for blocks
   lingot serve                   Start local MCP server for installed blocks
   lingot version                 Show CLI version
@@ -221,6 +223,13 @@ async function main() {
     case 'upgrade': {
       const updateNames = rawArgs.filter(a => !a.startsWith('--'));
       await update(updateNames.length > 0 ? updateNames : undefined);
+      break;
+    }
+
+    case 'create':
+    case 'new':
+    case 'scaffold': {
+      await create(rawArgs);
       break;
     }
 
