@@ -14,7 +14,13 @@ import { applyBudget, printBudgetSummary } from '../lib/budget.js';
 import { mine } from '../lib/mine.js';
 import { doctor } from '../lib/doctor.js';
 import { compile } from '../lib/compile.js';
-import { PACKAGES_DIR } from '../lib/config.js';
+import { PACKAGES_DIR, REGISTRY_URL } from '../lib/config.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { join, dirname } from 'path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PKG = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
 
 const [,, command, ...rawArgs] = process.argv;
 
@@ -40,7 +46,9 @@ Usage:
   lingot mine <url>              Auto-mine an intelligence block from a documentation URL
   lingot doctor [dir]            Lint blocks for context quality (Pink Elephant, dilution, collisions)
   lingot compile [dir]           Compile blocks into agent-ready format (Cursor .mdc or CLAUDE.md)
+  lingot search <query>          Search the registry for blocks
   lingot serve                   Start local MCP server for installed blocks
+  lingot version                 Show CLI version
   lingot help                    Show this help
 
 Flags:
@@ -204,8 +212,41 @@ async function main() {
       await compile(rawArgs);
       break;
 
+    case 'search': {
+      const query = rawArgs.filter(a => !a.startsWith('--')).join(' ');
+      if (!query) {
+        console.error('Usage: lingot search <query>');
+        process.exit(1);
+      }
+      try {
+        const res = await fetch(`${REGISTRY_URL}/search?q=${encodeURIComponent(query)}`);
+        const { results } = await res.json();
+        if (!results || results.length === 0) {
+          console.log(`No blocks found for "${query}".`);
+          break;
+        }
+        console.log(`\n  ${results.length} block${results.length === 1 ? '' : 's'} matching "${query}":\n`);
+        for (const r of results) {
+          const tokens = r.tokens_total ? ` (${r.tokens_total.toLocaleString()} tokens)` : '';
+          console.log(`  \x1b[1m${r.slug}\x1b[0m @${r.version}${tokens}`);
+          if (r.description) console.log(`  \x1b[2m${r.description}\x1b[0m`);
+          console.log();
+        }
+      } catch (err) {
+        console.error(`Search failed: ${err.message}`);
+        process.exit(1);
+      }
+      break;
+    }
+
     case 'serve':
       await serve();
+      break;
+
+    case 'version':
+    case '--version':
+    case '-v':
+      console.log(`lingot v${PKG.version}`);
       break;
 
     case 'help':

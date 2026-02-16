@@ -1,7 +1,7 @@
 {
   "name": "lingot",
-  "version": "1.2.1",
-  "description": "The standard library for AI agents. Intelligence blocks that make Cursor, Windsurf, and Claude Code measurably better.",
+  "version": "1.3.0",
+  "description": "The context compiler for AI coding agents. 77 intelligence blocks, context health scoring, clinical trial data. Baseline: 52%. With Lingot: 99.7%.",
   "type": "module",
   "bin": {
     "lingot": "./bin/lingot.js"
@@ -14,7 +14,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lingot-sh/lingot"
+    "url": "https://github.com/felixdigit/lingot"
   },
   "homepage": "https://lingot.sh",
   "dependencies": {
