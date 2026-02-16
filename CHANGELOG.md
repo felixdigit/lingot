@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.4.3
+
+- `lingot list --json` — machine-readable JSON output for CI/scripting
+- `lingot list` now shows total block count and token sum
+
+## 1.4.2
+
+- `lingot init` dependency map expanded to cover all 77 blocks
+- Covers auth (6), frameworks (6), backend (4), database (6), frontend (8), and more
+
+## 1.4.1
+
+- `lingot stats` / `lingot info` — dashboard showing installed blocks, total tokens, disk usage, domains
+- Helpful for understanding your context budget at a glance
+
 ## 1.4.0
 
 - `lingot update [names...]` — check registry for newer block versions and re-install
