@@ -3,3 +3,4 @@ trials/
 scripts/
 .env
 .DS_Store
+.vercel

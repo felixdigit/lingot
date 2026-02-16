@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.2
+
+- `lingot inspect <name>` now fetches from registry when block is not installed locally
+- **supabase-auth v2.0.0** — multi-tenant RLS, admin roles, realtime caching, deprecated pattern migration (4,440 tokens)
+- Mobile-responsive navigation with hamburger menu
+- Custom 404 page
+- **Research update:** B-2 experiment complete (N=100, 7,171 assertions) — knowledge carries 98%+ of the signal, rules add marginal noise regardless of polarity
+
 ## 1.6.1
 
 - `lingot outdated` — check for blocks with newer registry versions (dry-run)
