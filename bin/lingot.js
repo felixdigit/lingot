@@ -14,6 +14,7 @@ import { applyBudget, printBudgetSummary } from '../lib/budget.js';
 import { mine } from '../lib/mine.js';
 import { doctor } from '../lib/doctor.js';
 import { compile } from '../lib/compile.js';
+import { remove } from '../lib/remove.js';
 import { PACKAGES_DIR, REGISTRY_URL } from '../lib/config.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -44,6 +45,7 @@ Usage:
   lingot eval <name>             Run AII hallucination-delta evals for a block
   lingot eval-all                Run AII evals for all installed blocks with evals.yaml
   lingot mine <url>              Auto-mine an intelligence block from a documentation URL
+  lingot remove <name> [names...] Remove installed blocks
   lingot doctor [dir]            Lint blocks for context quality (Pink Elephant, dilution, collisions)
   lingot compile [dir]           Compile blocks into agent-ready format (Cursor .mdc or CLAUDE.md)
   lingot search <query>          Search the registry for blocks
@@ -199,6 +201,14 @@ async function main() {
         output: flagValue('--output'),
         name: flagValue('--name'),
       });
+      break;
+    }
+
+    case 'remove':
+    case 'uninstall':
+    case 'rm': {
+      const removeNames = rawArgs.filter(a => !a.startsWith('--'));
+      await remove(removeNames);
       break;
     }
 
