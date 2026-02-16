@@ -1,6 +1,6 @@
 {
   "name": "lingot",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "The context compiler for AI coding agents. 77 intelligence blocks, context health scoring, clinical trial data. Baseline: 52%. With Lingot: 99.7%.",
   "type": "module",
   "bin": {
