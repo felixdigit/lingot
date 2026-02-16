@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.2
+
+- `lingot doctor --min-score <N>` — configurable pass threshold for CI pipelines
+- CI/CD example in README (GitHub Actions workflow)
+
 ## 1.5.1
 
 - `lingot create <name>` — scaffold a new intelligence block with templates

@@ -138,6 +138,22 @@ Key findings:
 
 Full methodology, data, and analysis: [lingot.sh/research](https://lingot.sh/research)
 
+## CI/CD Integration
+
+Gate your PRs on context health:
+
+```yaml
+# .github/workflows/context-lint.yml
+name: Context Lint
+on: [pull_request]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx lingot doctor --min-score 80 --report
+```
+
 ## Contributing
 
 Want to create a block for your favorite library? See the [contribution guide](CONTRIBUTING.md).

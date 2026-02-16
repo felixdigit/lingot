@@ -67,6 +67,7 @@ Flags:
   --key <api-key>                API key for login (skip interactive prompt)
   --target <cursor|claude|windsurf> Target format for compile (default: claude)
   --report                       Output machine-readable JSON from doctor
+  --min-score <N>                Minimum doctor score to pass (default: 70, for CI)
   --verbose                      Show detailed output (prompts, responses, reasons)
 
 Blocks are installed to: ${PACKAGES_DIR}
@@ -85,6 +86,7 @@ Examples:
   npx lingot eval ./blocks/supabase-auth
   npx lingot doctor
   npx lingot doctor ./packages --report
+  npx lingot doctor --min-score 90
   npx lingot compile --target cursor
   npx lingot compile --target windsurf
   npx lingot compile --target claude --output ./CLAUDE.md
