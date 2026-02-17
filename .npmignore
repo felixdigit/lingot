@@ -1,6 +1,10 @@
 node_modules/
 package-lock.json
 aipkg.lock
+.next/
+.vercel/
+.env
+.DS_Store
 
 # Trial data and experiment scripts — not part of the CLI
 trials/

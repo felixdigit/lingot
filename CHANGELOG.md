@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.3
+
+- `lingot compile` — **Dead Rule Elimination**: Strips rules.xml from declarative library blocks by default (knowledge carries 99.4% of signal). Use `--rules` to override. Behavioral domains (workflow, architecture, style, security, compliance) keep their rules.
+- `lingot doctor` — **LINT-004 Instructional Bloat** replaces LINT-001 (Pink Elephant Tax). Flags blocks where rules exceed 50% of total tokens. Based on B-2 finding: rules yield <53% accuracy alone.
+- **E-3 Latent Hijacker confirmed:** Co-loading overlapping-domain blocks (drizzle + supabase-auth) causes -13.3pp accuracy crash (p < 0.0001, N=1,440)
+- **E-1 GPT-4o partial:** Knowledge context generalizes across model families (95.7% on GPT-4o)
+
 ## 1.6.2
 
 - `lingot inspect <name>` now fetches from registry when block is not installed locally
@@ -72,7 +79,7 @@
 ## 1.2.0
 
 - `lingot doctor [dir]` — context health scoring (0-100)
-  - LINT-001: Pink Elephant Tax (negative rules)
+  - LINT-004: Instructional Bloat (rules-heavy blocks)
   - LINT-002: Attention Dilution (token overload)
   - LINT-003: Latent Collision (scope overlap)
   - `--report` flag for machine-readable JSON
