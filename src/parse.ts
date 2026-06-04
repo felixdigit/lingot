@@ -35,8 +35,8 @@ export function parseRules(rulesXml: string): Rule[] {
   let match: RegExpExecArray | null;
 
   while ((match = rulePattern.exec(rulesXml)) !== null) {
-    const id = match[1].trim();
-    const content = unescapeXml(match[2].trim());
+    const id = (match[1] ?? "").trim();
+    const content = unescapeXml((match[2] ?? "").trim());
     rules.push({ id, content, tokens: estimateTokens(content) });
   }
 

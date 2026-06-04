@@ -87,8 +87,9 @@ export function formatSystemBlocks(
   }
 
   // Attach cache_control to the last block (cache everything up to this point)
-  if (blocks.length > 0) {
-    blocks[blocks.length - 1].cache_control = { type: "ephemeral" };
+  const last = blocks[blocks.length - 1];
+  if (last) {
+    last.cache_control = { type: "ephemeral" };
   }
 
   return blocks;
