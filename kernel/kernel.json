@@ -1,0 +1,10 @@
+{
+  "kernel": "0.1.0-shadow",
+  "description": "Lingot kernel v0 (P4, HX-009): the five concerns as compiled text, extracted from Ortova's organic harness per the P2 extraction map. SHADOW ONLY -- nothing here goes live without the parity gate + Felix's P4-adopt word.",
+  "source": "~/work/ortova CLAUDE.md (kernel sections) + docs/founder/buildout/zone-agent-spec.md (the pack constitution) + .claude/skills/boot/SKILL.md, read 2026-07-03",
+  "templates": {
+    "contract": "contract-base.md",
+    "pack": "pack-template.md",
+    "boot": "boot-skill.md"
+  }
+}
