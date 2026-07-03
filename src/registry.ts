@@ -132,8 +132,21 @@ export function sweep(rootArg: string): Registry {
   const strays: RegistryStray[] = [];
 
   // Pass 1: direct children of the root (the root itself is not a candidate).
-  const candidates = new Map<string, string>(); // abs path -> relpath
-  for (const dir of listChildDirs(root)) candidates.set(dir, relative(root, dir));
+  // Candidates are keyed by canonical path, so a transitional symlink (e.g. a
+  // renamed repo keeping its old name for tooling compat) dedupes onto the real
+  // directory and is surfaced as an info finding rather than a second venture.
+  const candidates = new Map<string, string>(); // canonical abs path -> relpath
+  const addCandidate = (dir: string) => {
+    const canon = canonicalPath(dir);
+    if (canon !== dir) {
+      findings.push({
+        level: "info",
+        message: `symlinked candidate ${relative(root, dir)} -> ${relative(root, canon)}; censused at the real path`,
+      });
+    }
+    if (!candidates.has(canon)) candidates.set(canon, relative(root, canon));
+  };
+  for (const dir of listChildDirs(root)) addCandidate(dir);
 
   // Pass 2: resolve manifests at candidates; find the studio.
   const manifested = new Map<string, RegistryVenture>(); // abs anchor -> venture
@@ -178,9 +191,10 @@ export function sweep(rootArg: string): Registry {
     registryDir = join(studio.anchor, studio.manifest.studio.registry);
     for (const glob of studio.manifest.studio.scan) {
       for (const dir of expandScanGlob(studio.anchor, glob)) {
-        candidates.set(dir, relative(root, dir));
-        const manifestPath = join(dir, "lingot.json");
-        if (existsSync(manifestPath) && !manifested.has(dir)) takeManifest(dir, manifestPath, "in-place");
+        const canon = canonicalPath(dir);
+        addCandidate(dir);
+        const manifestPath = join(canon, "lingot.json");
+        if (existsSync(manifestPath) && !manifested.has(canon)) takeManifest(canon, manifestPath, "in-place");
       }
     }
     const parkedDir = join(registryDir, "ventures");
