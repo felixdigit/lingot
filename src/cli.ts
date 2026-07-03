@@ -9,6 +9,8 @@ import {
   formatDoctorReport,
   renderBaselineMarkdown,
   findingKeys,
+  stampReport,
+  verifyReport,
   type DoctorReport,
 } from "./doctor";
 
@@ -88,6 +90,13 @@ if (command === "registry") {
         process.exit(1);
       }
       const baseline = JSON.parse(readFileSync(join(registryDir, "doctor.json"), "utf8")) as DoctorReport;
+      if (!verifyReport(baseline)) {
+        console.error(
+          "ratchet: the committed doctor.json fails provenance verification (hand-edited or pre-provenance) -- " +
+            "a baseline is only writable by running the checks: pnpm lingot doctor --all --write",
+        );
+        process.exit(1);
+      }
       const baseKeys = findingKeys(baseline);
       const newReds = [...findingKeys(report)].filter((k) => !baseKeys.has(k));
       if (newReds.length > 0) {
@@ -106,9 +115,9 @@ if (command === "registry") {
       console.log(formatDoctorReport(report));
     }
     if (write && registryDir) {
-      writeFileSync(join(registryDir, "doctor.json"), JSON.stringify(report, null, 2) + "\n");
+      writeFileSync(join(registryDir, "doctor.json"), JSON.stringify(stampReport(report), null, 2) + "\n");
       writeFileSync(join(registryDir, "doctor-baseline.md"), renderBaselineMarkdown(report));
-      console.log(`\nbaseline written: ${join(registryDir, "doctor.json")} + doctor-baseline.md`);
+      console.log(`\nbaseline written (provenance-stamped): ${join(registryDir, "doctor.json")} + doctor-baseline.md`);
     }
     process.exit(report.verdict === "green" ? 0 : 1);
   }

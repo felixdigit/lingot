@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -48,6 +49,28 @@ export interface DoctorReport {
   readonly studioFindings: readonly DoctorFinding[];
   readonly totals: { reds: number; yellows: number; infos: number };
   readonly verdict: "green" | "red";
+  /** Stamped by --write only; the ratchet refuses a baseline whose digest does not verify. */
+  readonly provenance?: { readonly tool: string; readonly digest: string };
+}
+
+/**
+ * Digest over the report content (provenance excluded). A baseline is only
+ * writable by running the checks (--write computes findings itself), so a
+ * hand-edited doctor.json fails verification instead of laundering a new red.
+ */
+export function reportDigest(report: DoctorReport): string {
+  const { provenance: _provenance, ...content } = report;
+  return createHash("sha256").update(JSON.stringify(content)).digest("hex");
+}
+
+/** Attach provenance for persistence (--write). */
+export function stampReport(report: DoctorReport): DoctorReport {
+  return { ...report, provenance: { tool: report.tool, digest: reportDigest(report) } };
+}
+
+/** Verify a loaded baseline's provenance. */
+export function verifyReport(report: DoctorReport): boolean {
+  return report.provenance !== undefined && report.provenance.digest === reportDigest(report);
 }
 
 // ---------------------------------------------------------------- utilities
@@ -128,6 +151,26 @@ function declarationResolves(anchor: string, value: string): boolean {
 
 const push = (arr: DoctorFinding[], f: DoctorFinding) => arr.push(f);
 
+function escapeRx(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * True when the text actually INVOKES the script (a runner followed by the
+ * name), not merely contains it as a substring ("testing" must not wire
+ * "test" -- audit finding, HX-006).
+ */
+function invokes(text: string, script: string): boolean {
+  return new RegExp(
+    `\\b(pnpm|npm|yarn|npx|bun)(\\s+run)?(\\s+(-{1,2}[\\w=-]+))*\\s+${escapeRx(script)}(?![\\w:.-])`,
+  ).test(text);
+}
+
+/** Word-boundary mention; script names carry ":" so \b alone is wrong. */
+function mentions(text: string, script: string): boolean {
+  return new RegExp(`(^|[^\\w:.-])${escapeRx(script)}(?![\\w:.-])`, "m").test(text);
+}
+
 // ---------------------------------------------------- per-venture concerns
 
 function checkAuthority(v: RegistryVenture, out: DoctorFinding[]): void {
@@ -145,11 +188,14 @@ function checkAuthority(v: RegistryVenture, out: DoctorFinding[]): void {
   } catch {
     /* unreadable settings = no gate evidence */
   }
-  const prePush = existsSync(join(a, ".git", "hooks", "pre-push")) || existsSync(join(a, ".husky", "pre-push"));
+  // A pre-push hook only counts if its CONTENT is guard-shaped -- a stock
+  // git-lfs hook is transport plumbing, not AUTHORITY (audit finding, HX-006).
+  const guardShaped = (path: string) => /guard|gate|forbid|deny|confirm|--i-am-|self-authoriz/i.test(readIf(path));
+  const prePush = guardShaped(join(a, ".git", "hooks", "pre-push")) || guardShaped(join(a, ".husky", "pre-push"));
   if (guardScripts.length === 0 && !denyGate && !prePush) {
     push(out, {
       venture: v.name, concern: "AUTHORITY", check: "gate-tooling", level: "red",
-      message: "no gate tooling found (no guard script, no settings deny-list on risky ops, no pre-push hook)",
+      message: "no gate tooling found (no guard script, no settings deny-list on risky ops, no guard-shaped pre-push hook)",
     });
   }
   // release path: a fleet (zone-set) requires a sanctioned release executor
@@ -258,7 +304,7 @@ function checkQuality(v: RegistryVenture, studioAnchor: string | undefined, out:
     return;
   }
   const wiring = wiringText(v.anchor, inheritedStudio);
-  const wired = checkNames.filter((s) => wiring.includes(s));
+  const wired = checkNames.filter((s) => invokes(wiring, s));
   if (wired.length === 0) {
     push(out, {
       venture: v.name, concern: "QUALITY", check: "checks-wired", level: "red",
@@ -290,7 +336,7 @@ function checkLearning(v: RegistryVenture, out: DoctorFinding[]): void {
     }
   }
   const corpus = routed.join("\n");
-  const unrouted = scripts.filter((s) => !corpus.includes(s));
+  const unrouted = scripts.filter((s) => !mentions(corpus, s));
   if (unrouted.length > 0) {
     push(out, {
       venture: v.name, concern: "LEARNING", check: "leverage-wired", level: "yellow",
