@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
@@ -60,6 +60,20 @@ export function expandTilde(path: string): string {
   return path === "~" || path.startsWith("~/") ? join(homedir(), path.slice(1)) : path;
 }
 
+/**
+ * Canonical absolute path: tilde-expanded, resolved, and symlink-free where the
+ * path exists (audit note, HX-005). Anchors and candidates are always compared
+ * in this form, so a symlinked root and a realpath'd anchor still match.
+ */
+export function canonicalPath(path: string): string {
+  const resolved = resolve(expandTilde(path));
+  try {
+    return realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
 /** Detects a linked git worktree: `.git` is a file whose gitdir points into ".git/worktrees/". */
 function detectWorktree(dir: string): { of: string; branch: string } | undefined {
   const gitPath = join(dir, ".git");
@@ -112,7 +126,7 @@ function loadTriage(registryDir: string, findings: Finding[]): TriageEntry[] {
 }
 
 export function sweep(rootArg: string): Registry {
-  const root = resolve(expandTilde(rootArg));
+  const root = canonicalPath(rootArg);
   const findings: Finding[] = [];
   const ventures: RegistryVenture[] = [];
   const strays: RegistryStray[] = [];
@@ -182,7 +196,7 @@ export function sweep(rootArg: string): Registry {
           findings.push({ level: "red", message: `${manifestPath}: parked manifest without anchor field` });
           continue;
         }
-        const anchor = resolve(expandTilde(manifest.anchor));
+        const anchor = canonicalPath(manifest.anchor);
         if (!existsSync(anchor)) {
           findings.push({ level: "red", message: `${manifestPath}: anchor ${manifest.anchor} does not exist` });
           continue;

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { sweep, formatSweepReport, expandTilde, type Registry } from "./registry";
+import { sweep, formatSweepReport, canonicalPath, type Registry } from "./registry";
 import { renderMap } from "./map";
 import { loadVentureManifest } from "./venture";
 
@@ -45,7 +45,7 @@ if (command === "registry") {
   console.log(formatSweepReport(registry));
   process.exit(registry.verdict === "green" ? 0 : 1);
 } else if (command === "map") {
-  const studioRoot = resolve(expandTilde(args[1] ?? process.cwd()));
+  const studioRoot = canonicalPath(args[1] ?? process.cwd());
   const registryDir = locateRegistryDir(studioRoot);
   const registryPath = join(registryDir, "registry.json");
   if (!existsSync(registryPath)) {
