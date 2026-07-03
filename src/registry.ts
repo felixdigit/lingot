@@ -125,7 +125,7 @@ function loadTriage(registryDir: string, findings: Finding[]): TriageEntry[] {
   }
 }
 
-export function sweep(rootArg: string): Registry {
+export function sweep(rootArg: string, opts: { write?: boolean } = {}): Registry {
   const root = canonicalPath(rootArg);
   const findings: Finding[] = [];
   const ventures: RegistryVenture[] = [];
@@ -264,7 +264,7 @@ export function sweep(rootArg: string): Registry {
     verdict: findings.some((f) => f.level === "red") ? "red" : "green",
   };
 
-  if (registryDir) {
+  if (registryDir && (opts.write ?? true)) {
     mkdirSync(registryDir, { recursive: true });
     writeFileSync(join(registryDir, "registry.json"), JSON.stringify(registry, null, 2) + "\n");
   }

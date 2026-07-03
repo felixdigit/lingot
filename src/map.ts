@@ -1,14 +1,22 @@
 import type { Registry, RegistryVenture } from "./registry";
+import { CONCERNS, type DoctorReport, type VentureDoctorReport } from "./doctor";
+import { dbProject } from "./venture";
 
 /**
  * `lingot map` -- org map v0, GENERATED from registry.json (generated beats written).
- * Reference rendering: Felix's hand-drawn v0 (~/work/overwatch/docs/founder/
+ * Reference rendering: Felix's hand-drawn v0 (~/work/ortova/docs/founder/
  * studio-operating-model.html): monochrome, one canvas, BASE + HARNESS PASS toggle.
- * The harness pass renders stubs (kernel chip, hollow concern squares) until the
- * doctor exists (P3); it should eventually render from doctor verdicts.
+ * With a doctor report (P3), the harness pass renders LIVE verdicts -- green/red
+ * per concern per venture; without one it renders hollow stubs. The org chart is
+ * the harness's own dashboard.
  */
 
 const W = 960;
+
+interface DoctorView {
+  readonly date: string;
+  readonly byVenture: Map<string, VentureDoctorReport>;
+}
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -39,18 +47,20 @@ function ventureSlots(ventures: readonly RegistryVenture[]): Slot[] {
   return row.map((v, i) => ({ v, x: margin + i * (w + gap), w }));
 }
 
-function ventureBox(slot: Slot, y: number, h: number, harness: boolean): string {
+function ventureBox(slot: Slot, y: number, h: number, harness: boolean, doctor?: DoctorView): string {
   const { v, x, w } = slot;
   const cx = x + w / 2;
   const m = v.manifest;
+  const docRep = doctor?.byVenture.get(v.name);
   const parts: string[] = [];
   parts.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" class="box"/>`);
   parts.push(`<text x="${cx}" y="${y + 20}" text-anchor="middle" font-size="12" font-weight="700">${esc(v.name.toUpperCase())}</text>`);
   const ownersLine = v.owners.join(" &#183; ") + (v.placement === "parked" ? " &#183; parked" : "");
   parts.push(`<text x="${cx}" y="${y + 34}" text-anchor="middle" font-size="8.5" class="cap">${ownersLine}</text>`);
+  const fit = (px: number, fontPx: number) => Math.max(10, Math.floor(px / (fontPx * 0.62)));
   const repo = m.identity.aliases?.repo;
   if (repo) {
-    parts.push(`<text x="${cx}" y="${y + 47}" text-anchor="middle" font-size="8" class="cap">repo: ${esc(truncate(repo, 26))}</text>`);
+    parts.push(`<text x="${cx}" y="${y + 47}" text-anchor="middle" font-size="8" class="cap">${esc(truncate("repo: " + repo, fit(w - 12, 8)))}</text>`);
   }
   if (harness) {
     const kernel = m.harness.kernel ?? "organic";
@@ -66,27 +76,42 @@ function ventureBox(slot: Slot, y: number, h: number, harness: boolean): string 
     lines.slice(0, 3).forEach((line, i) => {
       parts.push(`<text x="${cx}" y="${y + 62 + i * 11}" text-anchor="middle" font-size="7.5" class="cap">${line}</text>`);
     });
-    // Five concern squares -- hollow stubs until the doctor (P3).
+    // Five concern squares -- live doctor verdicts when a report exists, hollow stubs otherwise.
     const letters = ["A", "T", "L", "Q", "L"];
     const sqW = 12;
     const sq0 = cx - (5 * sqW + 4 * 6) / 2;
     letters.forEach((letter, i) => {
       const sx = sq0 + i * (sqW + 6);
-      parts.push(`<rect x="${sx}" y="${y + 92}" width="${sqW}" height="${sqW}" class="rsq"/>`);
-      parts.push(`<text x="${sx + sqW / 2}" y="${y + 101.5}" text-anchor="middle" font-size="7" class="cap">${letter}</text>`);
+      const verdict = docRep?.concerns.find((c) => c.concern === CONCERNS[i])?.verdict;
+      const cls = verdict === "green" ? "sqok" : verdict === "red" ? "sqred" : "rsq";
+      parts.push(`<rect x="${sx}" y="${y + 92}" width="${sqW}" height="${sqW}" class="${cls}"/>`);
+      parts.push(
+        `<text x="${sx + sqW / 2}" y="${y + 101.5}" text-anchor="middle" font-size="7" ${verdict ? 'fill="#f6f4ef"' : 'class="cap"'}>${letter}</text>`,
+      );
     });
-    parts.push(`<text x="${cx}" y="${y + 117}" text-anchor="middle" font-size="7.5" class="cap">doctor &#183; P3</text>`);
+    const reds = docRep ? docRep.findings.filter((f) => f.level === "red").length : 0;
+    parts.push(
+      `<text x="${cx}" y="${y + 117}" text-anchor="middle" font-size="7.5" class="cap">${
+        doctor ? `doctor ${doctor.date}${docRep ? ` &#183; ${reds} red` : ""}` : "doctor &#183; P3"
+      }</text>`,
+    );
     const stateBits = ["generator", "worksite", "decisions"].map(
       (k) => `${k[0]}${m.state[k] ? "&#10003;" : "&#8212;"}`,
     );
     parts.push(`<text x="${cx}" y="${y + 133}" text-anchor="middle" font-size="8" class="cap">state: ${stateBits.join(" &#183; ")}</text>`);
   }
-  const db = m.identity.aliases?.db;
+  const claim = dbProject(m.db);
+  const chipChars = fit(w - 32, 8.5);
+  const dbLabel = claim
+    ? claim === "studio"
+      ? `db: studio &#183; ${esc(m.db?.schema ?? "?")}.*`
+      : esc(truncate("db: " + (m.db?.display ?? claim), chipChars))
+    : m.identity.aliases?.db
+      ? esc(truncate("db: " + m.identity.aliases.db, chipChars))
+      : "no db declared";
   const chipY = y + h - 32;
   parts.push(`<rect x="${x + 12}" y="${chipY}" width="${w - 24}" height="22" class="soft"/>`);
-  parts.push(
-    `<text x="${cx}" y="${chipY + 14.5}" text-anchor="middle" font-size="8.5">${db ? "db: " + esc(truncate(db, 24)) : "own state"}</text>`,
-  );
+  parts.push(`<text x="${cx}" y="${chipY + 14.5}" text-anchor="middle" font-size="8.5">${dbLabel}</text>`);
   return parts.join("\n    ");
 }
 
@@ -154,7 +179,7 @@ function studioBox(studio: RegistryVenture | undefined, harness: boolean): strin
   return parts.join("\n    ");
 }
 
-function pass(registry: Registry, harness: boolean): string {
+function pass(registry: Registry, harness: boolean, doctor?: DoctorView): string {
   const studio = registry.ventures.find((v) => v.kind === "studio");
   const slots = ventureSlots(registry.ventures);
   const vy = 300;
@@ -193,7 +218,7 @@ function pass(registry: Registry, harness: boolean): string {
   parts.push(`<polygon points="850,212 845,222 855,222" fill="#8b877e"/>`);
   parts.push(`<text x="860" y="260" font-size="9" class="cap">learnings &#8593;</text>`);
   // Venture row + edges
-  for (const slot of slots) parts.push(ventureBox(slot, vy, vh, harness));
+  for (const slot of slots) parts.push(ventureBox(slot, vy, vh, harness, doctor));
   parts.push(consumeEdges(slots, rowBottom));
   if (harness) {
     const rowNames = new Set(slots.map((s) => s.v.name));
@@ -202,8 +227,11 @@ function pass(registry: Registry, harness: boolean): string {
       0,
     );
     const legendY = rowBottom + 34 + edgeCount * 22 + 26;
+    const tail = doctor
+      ? `&#8212; LIVE VERDICTS: lingot doctor ${doctor.date} (filled = green, red = failing)`
+      : "&#8212; VERDICTS LAND AT P3 (THE DOCTOR)";
     parts.push(
-      `<text x="480" y="${legendY}" text-anchor="middle" font-size="9" font-weight="700">A&#183;T&#183;L&#183;Q&#183;L = AUTHORITY &#183; TRUTH &#183; LABOR &#183; QUALITY &#183; LEARNING &#8212; VERDICTS LAND AT P3 (THE DOCTOR)</text>`,
+      `<text x="480" y="${legendY}" text-anchor="middle" font-size="9" font-weight="700">A&#183;T&#183;L&#183;Q&#183;L = AUTHORITY &#183; TRUTH &#183; LABOR &#183; QUALITY &#183; LEARNING ${tail}</text>`,
     );
   }
   return parts.join("\n    ");
@@ -222,20 +250,37 @@ function straysStrip(registry: Registry, y: number): string {
     );
   });
   const channels = registry.ventures.filter((v) => v.kind === "channel");
+  const personal = registry.ventures.filter((v) => v.kind === "personal");
   const cy = y + 18 + registry.strays.length * 13 + 8;
-  if (channels.length > 0) {
+  const bits: string[] = [];
+  if (channels.length > 0) bits.push(`channels: ${channels.map((c) => esc(c.name)).join(" &#183; ")} &#8212; handoffs only`);
+  if (personal.length > 0) bits.push(`personal plane: ${personal.map((p) => esc(p.name)).join(" &#183; ")}`);
+  if (bits.length > 0) {
     parts.push(
-      `<text x="52" y="${cy}" font-size="8.5" class="cap">channels: ${channels.map((c) => esc(c.name)).join(" &#183; ")} &#8212; handoffs only &#183; ventures never reach into each other</text>`,
+      `<text x="52" y="${cy}" font-size="8.5" class="cap">${bits.join(" &#183;&#183; ")} &#8212; ventures never reach into each other</text>`,
     );
   }
   return parts.join("\n    ");
 }
 
-export function renderMap(registry: Registry): string {
-  const straysY = 640;
+export function renderMap(registry: Registry, doctorReport?: DoctorReport): string {
+  const doctor: DoctorView | undefined = doctorReport
+    ? { date: doctorReport.generated.slice(0, 10), byVenture: new Map(doctorReport.ventures.map((v) => [v.name, v])) }
+    : undefined;
+  const rowVentures = registry.ventures.filter((v) => v.kind === "venture");
+  const rowNames = new Set(rowVentures.map((v) => v.name));
+  const edgeCount = rowVentures.reduce(
+    (n, v) => n + v.manifest.interfaces.consumes.filter((e) => e.of && rowNames.has(e.of)).length,
+    0,
+  );
+  // The harness pass is the tallest content: venture row bottom (500) + edge stack + legend + margin.
+  const straysY = Math.max(640, 500 + 34 + edgeCount * 22 + 26 + 34);
   const height = straysY + 18 + registry.strays.length * 13 + 60;
   const generated = registry.generated.slice(0, 16).replace("T", " ");
   const verdictColor = registry.verdict === "green" ? "#1c1b19" : "#8a1f1f";
+  const doctorBadge = doctorReport
+    ? ` &middot; doctor: <span style="color:${doctorReport.verdict === "green" ? "#1c1b19" : "#8a1f1f"}; font-weight:700">${doctorReport.verdict.toUpperCase()}</span> (${doctorReport.totals.reds} red)`
+    : "";
   return `<title>Nexod &middot; Org Map (generated)</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -262,6 +307,8 @@ export function renderMap(registry: Registry): string {
   svg .obar { fill: none; stroke: #1c1b19; stroke-width: 1; }
   svg .chip { fill: #f6f4ef; stroke: #1c1b19; stroke-width: 1; }
   svg .rsq  { fill: none; stroke: #57544e; stroke-width: 1; }
+  svg .sqok { fill: #1c1b19; stroke: #1c1b19; stroke-width: 1; }
+  svg .sqred { fill: #8a1f1f; stroke: #8a1f1f; stroke-width: 1; }
   .hidden { display: none; }
 </style>
 
@@ -272,20 +319,20 @@ export function renderMap(registry: Registry): string {
       <button id="b-base" class="on" onclick="setPass(false)">BASE</button>
       <button id="b-har" onclick="setPass(true)">HARNESS PASS</button>
     </div>
-    <span class="d">${generated} &middot; lingot map v0 &middot; sweep verdict: <span style="color:${verdictColor}; font-weight:700">${registry.verdict.toUpperCase()}</span></span>
+    <span class="d">${generated} &middot; lingot map v0 &middot; sweep: <span style="color:${verdictColor}; font-weight:700">${registry.verdict.toUpperCase()}</span>${doctorBadge}</span>
   </div>
 
   <svg viewBox="0 0 ${W} ${height}" width="100%" role="img" aria-label="Nexod org map, generated from the venture registry">
   <g id="render-base">
-    ${pass(registry, false)}
+    ${pass(registry, false, doctor)}
   </g>
   <g id="render-harness" class="hidden">
-    ${pass(registry, true)}
+    ${pass(registry, true, doctor)}
   </g>
   <g>
     ${straysStrip(registry, straysY)}
     <text x="480" y="${height - 22}" text-anchor="middle" font-size="10.5" font-weight="700">own repo &middot; own DB &middot; own fleet &middot; same engine</text>
-    <text x="480" y="${height - 8}" text-anchor="middle" font-size="8.5" class="cap">generated from registry.json by lingot map &middot; harness pass renders doctor verdicts from P3</text>
+    <text x="480" y="${height - 8}" text-anchor="middle" font-size="8.5" class="cap">generated from registry.json${doctorReport ? " + doctor.json" : ""} by lingot map &middot; the org chart is the harness's own dashboard</text>
   </g>
   </svg>
 </div>

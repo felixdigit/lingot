@@ -7,14 +7,41 @@ import { readFileSync } from "node:fs";
  * Spec: ~/work/overwatch/docs/founder/harness-structure.md (RULED 2026-07-03).
  */
 
-export type VentureKind = "venture" | "studio" | "workshop" | "channel";
+export type VentureKind = "venture" | "studio" | "workshop" | "channel" | "personal";
 
 export const VENTURE_KINDS: readonly VentureKind[] = [
   "venture",
   "studio",
   "workshop",
   "channel",
+  "personal",
 ];
+
+/**
+ * The DB topology law (ruled 2026-07-03): default one project per venture;
+ * incubating ventures live in the STUDIO project under their own schema,
+ * declared here. `project` is a Supabase project ref, or the sentinel
+ * "studio" for declared co-tenancy in the studio's project. Platform-side
+ * manifests write the ref under `ref` (+ optional `display`) -- accepted as
+ * an alias; read through dbProject().
+ */
+export interface DbBlock {
+  readonly project?: string;
+  readonly ref?: string;
+  readonly schema?: string;
+  readonly display?: string;
+}
+
+/** The db block's project claim, whichever key the manifest used. */
+export function dbProject(db: DbBlock | undefined): string | undefined {
+  return db?.project ?? db?.ref;
+}
+
+/** The anchor's repo identity; the doctor checks the actual origin against it. */
+export interface RepoBlock {
+  readonly github: string;
+  readonly default_branch?: string;
+}
 
 /** One edge of the org map: something a venture provides or consumes. */
 export interface InterfaceEdge {
@@ -56,6 +83,10 @@ export interface VentureManifest {
   readonly parked?: string;
   readonly identity: VentureIdentity;
   readonly harness: VentureHarness;
+  /** DB topology declaration (stateful ventures). Absent = declares no state. */
+  readonly db?: DbBlock;
+  /** Repo identity (anchors that are their own repo). */
+  readonly repo?: RepoBlock;
   /** Living surfaces the doctor requires fresh. null = does not exist yet. */
   readonly state: Readonly<Record<string, string | null>>;
   readonly interfaces: {
@@ -115,6 +146,21 @@ export function loadVentureManifest(path: string): ManifestLoadResult {
     !Array.isArray(m.interfaces.consumes)
   ) {
     errors.push(`${path}: interfaces block must carry provides[] + consumes[]`);
+  }
+  if (m.db !== undefined) {
+    const claim = typeof m.db === "object" && m.db !== null ? (m.db.project ?? m.db.ref) : undefined;
+    if (typeof claim !== "string" || claim.length === 0) {
+      errors.push(`${path}: db block must carry a non-empty project (or ref): a Supabase ref, or the sentinel "studio"`);
+    } else if (m.db.project !== undefined && m.db.ref !== undefined && m.db.project !== m.db.ref) {
+      errors.push(`${path}: db block carries both project and ref with different values`);
+    } else if (m.db.schema !== undefined && typeof m.db.schema !== "string") {
+      errors.push(`${path}: db.schema must be a string when present`);
+    }
+  }
+  if (m.repo !== undefined) {
+    if (typeof m.repo !== "object" || m.repo === null || typeof m.repo.github !== "string" || m.repo.github.length === 0) {
+      errors.push(`${path}: repo block must carry a non-empty github (owner/name)`);
+    }
   }
   return errors.length > 0 ? { errors } : { manifest: m, errors: [] };
 }
