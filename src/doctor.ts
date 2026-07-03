@@ -173,29 +173,40 @@ function mentions(text: string, script: string): boolean {
 
 // ---------------------------------------------------- per-venture concerns
 
-function checkAuthority(v: RegistryVenture, out: DoctorFinding[]): void {
-  const a = v.anchor;
-  const agentsDir = join(a, ".claude", "agents");
-  const packs = listFiles(agentsDir, ".md");
-  // gate tooling: a guard script, a settings deny-list covering risky git ops, or a pre-push hook
-  const guardScripts = listFiles(join(a, "scripts")).filter((f) => /guard/i.test(f));
-  let denyGate = false;
+// A hook only counts if its CONTENT is guard-shaped -- a stock git-lfs hook is
+// transport plumbing, not AUTHORITY (audit HX-006). Word-boundaried so "gate"
+// inside "aggregate" does not count (delta-audit caveat, HX-008).
+const GUARD_SHAPE = /\b(guard|gate|gated|forbid|deny|denied|confirm)\b|--i-am-|self-authoriz/i;
+
+/** Gate evidence at one anchor: guard script, settings deny-list, or a guard-shaped pre-push hook. */
+function gateEvidence(anchor: string): boolean {
+  if (listFiles(join(anchor, "scripts")).some((f) => /guard/i.test(f))) return true;
   try {
-    const settings = JSON.parse(readIf(join(a, ".claude", "settings.json")) || "{}") as {
+    const settings = JSON.parse(readIf(join(anchor, ".claude", "settings.json")) || "{}") as {
       permissions?: { deny?: string[] };
     };
-    denyGate = (settings.permissions?.deny ?? []).some((d) => /push|reset|force|deploy/i.test(d));
+    if ((settings.permissions?.deny ?? []).some((d) => /push|reset|force|deploy/i.test(d))) return true;
   } catch {
     /* unreadable settings = no gate evidence */
   }
-  // A pre-push hook only counts if its CONTENT is guard-shaped -- a stock
-  // git-lfs hook is transport plumbing, not AUTHORITY (audit finding, HX-006).
-  const guardShaped = (path: string) => /guard|gate|forbid|deny|confirm|--i-am-|self-authoriz/i.test(readIf(path));
-  const prePush = guardShaped(join(a, ".git", "hooks", "pre-push")) || guardShaped(join(a, ".husky", "pre-push"));
-  if (guardScripts.length === 0 && !denyGate && !prePush) {
+  const guardShaped = (path: string) => GUARD_SHAPE.test(readIf(path));
+  return guardShaped(join(anchor, ".git", "hooks", "pre-push")) || guardShaped(join(anchor, ".husky", "pre-push"));
+}
+
+function checkAuthority(v: RegistryVenture, out: DoctorFinding[], studioAnchor?: string): void {
+  const a = v.anchor;
+  const agentsDir = join(a, ".claude", "agents");
+  const packs = listFiles(agentsDir, ".md");
+  // Git ops are repo-level: an anchor nested inside the studio repo shares the
+  // studio's .git, so the studio's gate tooling IS its gate tooling (same
+  // inheritance semantics as QUALITY checks-wired).
+  const nested = studioAnchor !== undefined && a !== studioAnchor && a.startsWith(studioAnchor + "/");
+  const gated = gateEvidence(a) || (nested && gateEvidence(studioAnchor));
+  if (!gated) {
     push(out, {
       venture: v.name, concern: "AUTHORITY", check: "gate-tooling", level: "red",
-      message: "no gate tooling found (no guard script, no settings deny-list on risky ops, no guard-shaped pre-push hook)",
+      message: "no gate tooling found (no guard script, no settings deny-list on risky ops, no guard-shaped pre-push hook)" +
+        (nested ? " at the anchor or the studio repo it nests in" : ""),
     });
   }
   // release path: a fleet (zone-set) requires a sanctioned release executor
@@ -373,6 +384,7 @@ function checkDbCensus(ventures: readonly RegistryVenture[], registryDir: string
   const studioVenture = ventures.find((v) => v.kind === "studio");
   const owners = new Map<string, string[]>(); // ref -> venture names claiming ownership
   for (const v of ventures) {
+    if (v.manifest.db === null) continue; // explicit null = knowingly stateless, the check's third option
     const claim = dbProject(v.manifest.db);
     if (!claim) {
       if (v.kind === "venture" || v.kind === "studio") {
@@ -505,7 +517,7 @@ function doctorVenture(v: RegistryVenture, studioAnchor: string | undefined): Ve
   const findings: DoctorFinding[] = [];
   checkTruth(v, findings);
   if (FULL_KINDS.has(v.kind)) {
-    checkAuthority(v, findings);
+    checkAuthority(v, findings, studioAnchor);
     checkLabor(v, findings);
     checkQuality(v, studioAnchor, findings);
     checkLearning(v, findings);

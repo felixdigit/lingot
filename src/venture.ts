@@ -32,8 +32,8 @@ export interface DbBlock {
   readonly display?: string;
 }
 
-/** The db block's project claim, whichever key the manifest used. */
-export function dbProject(db: DbBlock | undefined): string | undefined {
+/** The db block's project claim, whichever key the manifest used. `null` = declared stateless. */
+export function dbProject(db: DbBlock | null | undefined): string | undefined {
   return db?.project ?? db?.ref;
 }
 
@@ -83,8 +83,8 @@ export interface VentureManifest {
   readonly parked?: string;
   readonly identity: VentureIdentity;
   readonly harness: VentureHarness;
-  /** DB topology declaration (stateful ventures). Absent = declares no state. */
-  readonly db?: DbBlock;
+  /** DB topology declaration. Absent = undeclared; explicit null = knowingly stateless. */
+  readonly db?: DbBlock | null;
   /** Repo identity (anchors that are their own repo). */
   readonly repo?: RepoBlock;
   /** Living surfaces the doctor requires fresh. null = does not exist yet. */
@@ -147,8 +147,8 @@ export function loadVentureManifest(path: string): ManifestLoadResult {
   ) {
     errors.push(`${path}: interfaces block must carry provides[] + consumes[]`);
   }
-  if (m.db !== undefined) {
-    const claim = typeof m.db === "object" && m.db !== null ? (m.db.project ?? m.db.ref) : undefined;
+  if (m.db !== undefined && m.db !== null) {
+    const claim = typeof m.db === "object" ? (m.db.project ?? m.db.ref) : undefined;
     if (typeof claim !== "string" || claim.length === 0) {
       errors.push(`${path}: db block must carry a non-empty project (or ref): a Supabase ref, or the sentinel "studio"`);
     } else if (m.db.project !== undefined && m.db.ref !== undefined && m.db.project !== m.db.ref) {
