@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { sweep, formatSweepReport, canonicalPath, type Registry } from "./registry";
 import { renderMap } from "./map";
 import { loadVentureManifest } from "./venture";
+import { compileHarness, diffHarness, replayPack, formatDrift, formatReplay } from "./harness-compile";
 import {
   doctorAll,
   doctorOne,
@@ -25,7 +26,11 @@ import {
  *          --write     also write registry/doctor.json + doctor-baseline.md (the committed baseline)
  *          --ratchet   compare against committed doctor.json; exit 1 only on NEW reds (pre-commit mode)
  *
- * `lingot compile` lands at P4.
+ *   pnpm lingot compile <path> [--out DIR]          manifest -> SHADOW harness (never .claude/)
+ *          --diff              compare the shadow output against the venture's ORGANIC files
+ *          --replay <pack.md>  rubric parity: compiled pack vs organic pack (zone-agent-spec slice)
+ *
+ * Compiled output is shadow-only until the parity gate + Felix's P4-adopt word.
  */
 
 function usage(): never {
@@ -138,6 +143,47 @@ if (command === "registry") {
     for (const f of report.findings) console.log(`  ${f.level === "red" ? "✗" : f.level === "yellow" ? "△" : "·"} [${f.concern}/${f.check}] ${f.message}`);
   }
   process.exit(hasRed ? 1 : 0);
+} else if (command === "compile") {
+  const anchor = canonicalPath(positional[0] ?? process.cwd());
+  const manifestPath = join(anchor, "lingot.json");
+  const { manifest, errors } = loadVentureManifest(manifestPath);
+  if (!manifest) {
+    for (const e of errors) console.error(e);
+    process.exit(1);
+  }
+  const outFlagIdx = args.indexOf("--out");
+  const outDir = outFlagIdx !== -1 && args[outFlagIdx + 1] ? canonicalPath(args[outFlagIdx + 1]) : join(anchor, ".lingot", "compiled");
+  const studioRoot = canonicalPath(process.cwd());
+  if (!outDir.startsWith(studioRoot + "/") && !outDir.startsWith(anchor + "/")) {
+    console.error(`compile: refusing out dir ${outDir} -- shadow output must live under the anchor's .lingot/ or the studio tree`);
+    process.exit(1);
+  }
+  if (!anchor.startsWith(studioRoot) && outFlagIdx === -1) {
+    console.error(
+      `compile: ${anchor} is outside the studio tree (read-only boundary) -- pass an explicit studio-side shadow home, e.g. --out registry/shadow/${manifest.identity.name}`,
+    );
+    process.exit(1);
+  }
+  const result = compileHarness(manifest, anchor, outDir);
+  console.log(`compiled (SHADOW, kernel ${result.kernel}): ${result.files.length} files -> ${result.outDir}`);
+  if (flags.has("--diff")) {
+    console.log("");
+    console.log(formatDrift(diffHarness(anchor, outDir)));
+  }
+  const replayIdx = args.indexOf("--replay");
+  if (replayIdx !== -1 && args[replayIdx + 1]) {
+    const packName = args[replayIdx + 1];
+    const organicPath = join(anchor, ".claude", "agents", packName);
+    const compiledPath = join(outDir, "packs", packName);
+    if (!existsSync(organicPath) || !existsSync(compiledPath)) {
+      console.error(`replay: need both organic (${organicPath}) and compiled (${compiledPath})`);
+      process.exit(1);
+    }
+    console.log("");
+    const replay = replayPack(organicPath, compiledPath);
+    console.log(formatReplay(replay));
+    process.exit(replay.parity ? 0 : 1);
+  }
 } else {
   usage();
 }

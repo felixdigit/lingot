@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { sweep, type Registry, type RegistryVenture } from "./registry";
 import { dbProject, type VentureManifest } from "./venture";
+import { diffHarness } from "./harness-compile";
 
 /**
  * `lingot doctor` -- mechanical conformance (HX-006, P3).
@@ -513,7 +514,30 @@ function checkExchange(v: RegistryVenture, out: DoctorFinding[]): void {
 
 const FULL_KINDS = new Set(["venture", "studio"]);
 
-function doctorVenture(v: RegistryVenture, studioAnchor: string | undefined): VentureDoctorReport {
+/**
+ * COMPILED-vs-ORGANIC drift (P4, HX-009): yellow while the compile is shadow
+ * (kernel pin null); RED once the manifest declares kernel adoption and the
+ * shadow still drifts from the organic files.
+ */
+function checkCompiledDrift(v: RegistryVenture, registryDir: string | undefined, out: DoctorFinding[]): void {
+  const candidates = [join(v.anchor, ".lingot", "compiled"), ...(registryDir ? [join(registryDir, "shadow", v.name)] : [])];
+  const shadow = candidates.find((d) => existsSync(join(d, "compiled.json")));
+  if (!shadow) return;
+  try {
+    const drift = diffHarness(v.anchor, shadow);
+    if (drift.totals.driftLines === 0) return;
+    const adopted = v.manifest.harness.kernel !== null;
+    push(out, {
+      venture: v.name, concern: "TRUTH", check: "compiled-drift",
+      level: adopted ? "red" : "yellow",
+      message: `compiled-vs-organic drift: ${drift.totals.driftLines} lines across ${drift.files.length} files (${adopted ? "kernel ADOPTED -- compiled and organic must match" : "shadow mode"})`,
+    });
+  } catch (err) {
+    push(out, { venture: v.name, concern: "TRUTH", check: "compiled-drift", level: "yellow", message: `shadow present but undiffable: ${(err as Error).message}` });
+  }
+}
+
+function doctorVenture(v: RegistryVenture, studioAnchor: string | undefined, registryDir?: string): VentureDoctorReport {
   const findings: DoctorFinding[] = [];
   checkTruth(v, findings);
   if (FULL_KINDS.has(v.kind)) {
@@ -523,6 +547,7 @@ function doctorVenture(v: RegistryVenture, studioAnchor: string | undefined): Ve
     checkLearning(v, findings);
   }
   if (v.kind === "channel") checkExchange(v, findings);
+  checkCompiledDrift(v, registryDir, findings);
   const concernSet = FULL_KINDS.has(v.kind) ? [...CONCERNS] : [...new Set(findings.map((f) => f.concern))];
   const concerns: ConcernVerdict[] = concernSet.map((c) => {
     const mine = findings.filter((f) => f.concern === c);
@@ -540,7 +565,7 @@ export function doctorAll(root: string, opts: { write?: boolean } = {}): { repor
   const registry = sweep(root, { write: opts.write ?? false });
   const studio = registry.ventures.find((v) => v.kind === "studio");
   const registryDir = studio?.manifest.studio ? join(studio.anchor, studio.manifest.studio.registry) : undefined;
-  const ventures = registry.ventures.map((v) => doctorVenture(v, studio?.anchor));
+  const ventures = registry.ventures.map((v) => doctorVenture(v, studio?.anchor, registryDir));
   const studioFindings: DoctorFinding[] = [];
   for (const f of registry.findings.filter((f) => f.level === "red")) {
     studioFindings.push({ venture: "studio", concern: "REGISTRY", check: "sweep", level: "red", message: f.message });

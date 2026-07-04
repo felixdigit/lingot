@@ -16,3 +16,5 @@ export { renderMap } from "./map";
 export type { DbBlock, RepoBlock } from "./venture";
 export { doctorAll, doctorOne, formatDoctorReport, renderBaselineMarkdown, findingKeys, stampReport, verifyReport, reportDigest, CONCERNS, STUDIO_CONCERNS } from "./doctor";
 export type { DoctorReport, DoctorFinding, VentureDoctorReport, ConcernVerdict } from "./doctor";
+export { compileHarness, diffHarness, replayPack, renderTemplate, formatDrift, formatReplay, loadKernel } from "./harness-compile";
+export type { CompileResult, DriftReport, FileDrift, ReplayResult, RubricPoint } from "./harness-compile";
