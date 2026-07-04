@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
  * Venture manifest (`lingot.json` at a venture anchor), schema lingot/v0.
  * The block-level manifest (blocks/*\/lingot.json) promoted one level: the
  * venture declares WHAT it is; Lingot verdicts WHETHER it is that (doctor, P3).
- * Spec: ~/work/overwatch/docs/founder/harness-structure.md (RULED 2026-07-03).
+ * Spec: ~/work/ortova/docs/founder/harness-structure.md (RULED 2026-07-03).
  */
 
 export type VentureKind = "venture" | "studio" | "workshop" | "channel" | "personal";
