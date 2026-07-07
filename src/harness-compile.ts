@@ -42,6 +42,7 @@ export function renderTemplate(template: string, ctx: Record<string, unknown>): 
 
 function templateContext(manifest: VentureManifest): Record<string, unknown> {
   const founderRaw = manifest.identity.owners[0] ?? "the founder";
+  const gateWall = manifest.harness.modules["gate-wall"] as { gated?: string[]; enforcement?: string } | undefined;
   return {
     name: manifest.identity.name,
     title: manifest.identity.name.charAt(0).toUpperCase() + manifest.identity.name.slice(1),
@@ -52,7 +53,45 @@ function templateContext(manifest: VentureManifest): Record<string, unknown> {
     modules: manifest.harness.modules,
     db: manifest.db ?? undefined,
     dbProject: dbProject(manifest.db ?? undefined),
+    // The gate-wall's gated list rendered as a readable inline phrase (the raw
+    // array String()s to a bare comma-join; this keeps the compiled prose clean).
+    gateWallList: gateWall?.gated ? gateWall.gated.join(", ") : "",
   };
+}
+
+/**
+ * A venture-authored front charter (`<anchor>/docs/fronts/zone-N-<slug>.md`),
+ * parsed into its named `## <slot>` sections. The compiler inlines these into
+ * the pack template's `{{charter.<slot>}}` OVERLAY slots -- the P4 filling
+ * mechanism, so a compiled pack carries the venture's real routing content
+ * instead of a hollow skeleton. Missing charter or slot -> the renderer's
+ * explicit `<UNRESOLVED:charter.<slot>>` marker shows the gap in the diff.
+ */
+function loadCharter(anchor: string, zone: number, slug: string): Record<string, string> {
+  const path = join(anchor, "docs", "fronts", `zone-${zone}-${slug}.md`);
+  if (!existsSync(path)) return {};
+  const text = readFileSync(path, "utf8");
+  const out: Record<string, string> = {};
+  const headers = [...text.matchAll(/^##\s+(.+?)\s*$/gm)];
+  for (let k = 0; k < headers.length; k++) {
+    const name = headers[k][1].trim();
+    const start = (headers[k].index ?? 0) + headers[k][0].length;
+    const end = k + 1 < headers.length ? (headers[k + 1].index ?? text.length) : text.length;
+    out[name] = text.slice(start, end).trim();
+  }
+  return out;
+}
+
+/** Front slugs from charter filenames (`docs/fronts/zone-N-<slug>.md`), by zone number. */
+function charterSlugs(anchor: string): Map<number, string> {
+  const dir = join(anchor, "docs", "fronts");
+  const map = new Map<number, string>();
+  if (!existsSync(dir)) return map;
+  for (const f of readdirSync(dir)) {
+    const m = f.match(/^zone-(\d+)-(.+)\.md$/);
+    if (m) map.set(Number(m[1]), m[2]);
+  }
+  return map;
 }
 
 /** Organic zone-pack filenames at the anchor, by zone number, for slug + diff alignment. */
@@ -87,11 +126,15 @@ export function compileHarness(manifest: VentureManifest, anchor: string, outDir
   const zoneSet = manifest.harness.modules["zone-set"] as { fronts?: number } | undefined;
   if (zoneSet?.fronts) {
     const packTemplate = readFileSync(join(KERNEL_DIR, kernel.templates.pack), "utf8");
+    const charters = charterSlugs(anchor);
     const organic = organicZonePacks(anchor);
     for (let i = 1; i <= zoneSet.fronts; i++) {
+      // Slug source, in order: the venture charter filename, then an already-organic
+      // pack filename, then the generic front-N fallback.
       const organicName = organic.get(i);
-      const slug = organicName ? organicName.replace(/^zone-\d+-|\.md$/g, "") : `front-${i}`;
-      emit(`packs/zone-${i}-${slug}.md`, renderTemplate(packTemplate, { ...ctx, zone: i, zoneSlug: slug }));
+      const slug = charters.get(i) ?? (organicName ? organicName.replace(/^zone-\d+-|\.md$/g, "") : `front-${i}`);
+      const charter = loadCharter(anchor, i, slug);
+      emit(`packs/zone-${i}-${slug}.md`, renderTemplate(packTemplate, { ...ctx, zone: i, zoneSlug: slug, charter }));
     }
   }
   emit("skills/boot.md", renderTemplate(readFileSync(join(KERNEL_DIR, kernel.templates.boot), "utf8"), ctx));
