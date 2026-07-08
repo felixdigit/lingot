@@ -18,3 +18,5 @@ export { doctorAll, doctorOne, formatDoctorReport, renderBaselineMarkdown, findi
 export type { DoctorReport, DoctorFinding, VentureDoctorReport, ConcernVerdict } from "./doctor";
 export { compileHarness, diffHarness, replayPack, renderTemplate, formatDrift, formatReplay, loadKernel } from "./harness-compile";
 export type { CompileResult, DriftReport, FileDrift, ReplayResult, RubricPoint } from "./harness-compile";
+export { loadHarnessManifest, isHarnessManifest, HARNESS_SCHEMA_TAG } from "./harness-manifest";
+export type { HarnessManifest, HarnessManifestLoadResult, Identity, KernelPin, LoopBinding, RoutingBlock, ContextBlock, ToolsBlock, OrchestrationBlock, StateBlock, ObservabilityBlock, EvaluationBlock, SafetyBlock, SecretsBlock, ReliabilityBlock, PerimeterBlock, Automation, AuthoringBlock } from "./harness-manifest";
