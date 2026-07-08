@@ -25,3 +25,5 @@ export type { ResolveResult } from "./harness-merge";
 export { KERNEL_DEFAULTS, KERNEL_VERSION } from "./harness-kernel";
 export { emitDeployScope, compileTargets } from "./harness-emit";
 export type { CompiledArtifact } from "./harness-emit";
+export { computeVerdict, formatVerdict } from "./harness-verdict";
+export type { Verdict, VerdictCheck, VerdictLevel, CheckStatus, VerdictProbes } from "./harness-verdict";
