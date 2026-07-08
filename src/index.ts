@@ -22,3 +22,6 @@ export { loadHarnessManifest, isHarnessManifest, HARNESS_SCHEMA_TAG } from "./ha
 export type { HarnessManifest, HarnessManifestLoadResult, Identity, KernelPin, LoopBinding, RoutingBlock, ContextBlock, ToolsBlock, OrchestrationBlock, StateBlock, ObservabilityBlock, EvaluationBlock, SafetyBlock, SecretsBlock, ReliabilityBlock, PerimeterBlock, Automation, AuthoringBlock } from "./harness-manifest";
 export { deepMerge, enforceManagedBand, resolveProject, MANAGED_PATHS } from "./harness-merge";
 export type { ResolveResult } from "./harness-merge";
+export { KERNEL_DEFAULTS, KERNEL_VERSION } from "./harness-kernel";
+export { emitDeployScope, compileTargets } from "./harness-emit";
+export type { CompiledArtifact } from "./harness-emit";
