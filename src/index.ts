@@ -30,3 +30,5 @@ export { computeVerdict, formatVerdict } from "./harness-verdict";
 export type { Verdict, VerdictCheck, VerdictLevel, CheckStatus, VerdictProbes } from "./harness-verdict";
 export { adopt, materialize } from "./harness-adopt";
 export type { AdoptResult, AdoptOptions, MaterializeResult } from "./harness-adopt";
+export { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
+export type { HarnessDoctorReport, HarnessDoctorFinding, DoctorLevel, DoctorOptions } from "./harness-doctor";

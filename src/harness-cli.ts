@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { adopt } from "./harness-adopt";
 import { formatVerdict } from "./harness-verdict";
+import { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
 
 /**
  * The harness CLI (Phase 0, 0.3c) -- the terminal operator surface
@@ -17,7 +18,7 @@ import { formatVerdict } from "./harness-verdict";
  */
 
 function usage(): never {
-  console.log("usage: harness boot <dir|manifest> [--dry] | harness adopt <dir|manifest>");
+  console.log("usage: harness boot <dir|manifest> [--dry] | harness adopt <dir|manifest> | harness doctor <dir|manifest>");
   process.exit(2);
 }
 
@@ -62,6 +63,17 @@ if (command === "boot" || command === "adopt") {
     process.exit(1);
   }
   process.exit(result.verdict.level === "BLOCKED" ? 1 : 0);
+} else if (command === "doctor") {
+  const target = positional[0];
+  if (!target) usage();
+  const manifestPath = resolveManifestPath(target);
+  if (!manifestPath) {
+    console.error(`no harness/v1 manifest found at ${target} (expected a harness.json, or a dir containing one)`);
+    process.exit(1);
+  }
+  const report = doctorProject(manifestPath);
+  console.log(formatHarnessDoctorReport(report));
+  process.exit(report.verdict === "red" ? 1 : 0);
 } else {
   usage();
 }
