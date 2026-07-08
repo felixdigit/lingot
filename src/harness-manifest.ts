@@ -64,10 +64,35 @@ export interface OrchestrationBlock {
   readonly topologies?: readonly string[];
 }
 
-/** L5: memory backend + store. store null = declared-stateless. */
+/** L5: memory backend + store + the living surfaces the contract/cold-boot reference. store null = declared-stateless. */
 export interface StateBlock {
   readonly memory?: { readonly backend?: string; readonly source?: string };
   readonly store?: { readonly project?: string; readonly schema?: string } | null;
+  /** Shared work queue / external memory (e.g. "pnpm worksite (/op/worksite)"). */
+  readonly worksite?: string;
+  /** Decision surface pointer. */
+  readonly decisions?: string;
+  /** Live-state generator command (output must be gitignored). */
+  readonly generator?: string;
+}
+
+/**
+ * L8 governance the operating contract renders: the gate wall (release ops only
+ * the founder authorizes), the verification discipline, client comms shape, and
+ * the design gate. Ported from the v0 harness modules; carried so the compiled
+ * AGENTS.md is a full operating contract, not a thin summary.
+ */
+export interface GovernanceBlock {
+  /** The gate wall: release ops the fleet never self-authorizes (trigger/activation/spend/deploy/...). */
+  readonly gated?: readonly string[];
+  /** How the gate wall is enforced (one line). */
+  readonly enforcement?: string;
+  /** The verification discipline (the refuter shape). */
+  readonly verification?: string;
+  /** Client comms asymmetry/cadence/register. */
+  readonly comms?: { readonly asymmetry?: string; readonly cadence?: string; readonly register?: string };
+  /** The mandatory design gate (e.g. a craft skill), if any. */
+  readonly design_gate?: string;
 }
 
 /** L6: standard spans (non-overridable floor) + swappable sink + the cost metric. */
@@ -146,6 +171,7 @@ export interface HarnessManifest {
   readonly observability?: ObservabilityBlock;
   readonly evaluation?: EvaluationBlock;
   readonly safety?: SafetyBlock;
+  readonly governance?: GovernanceBlock;
   readonly secrets?: SecretsBlock;
   readonly reliability?: ReliabilityBlock;
   readonly perimeter?: PerimeterBlock;
