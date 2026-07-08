@@ -1,6 +1,47 @@
 import { createHash } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import type { HarnessManifest } from "./harness-manifest";
 import type { TierEntry } from "./harness-kernel";
+
+interface Front {
+  readonly name: string;
+  readonly description: string;
+}
+
+/**
+ * Read the venture's front charters (context.charters, e.g. "docs/fronts/zone-*.md")
+ * relative to the anchor, and extract each front's name + one-line description.
+ * Minimal single-`*` glob over one directory. Missing dir -> no fronts (safe).
+ */
+function readCharters(anchor: string, glob: string): Front[] {
+  const slash = glob.lastIndexOf("/");
+  const dir = slash >= 0 ? glob.slice(0, slash) : ".";
+  const pat = slash >= 0 ? glob.slice(slash + 1) : glob;
+  const rx = new RegExp("^" + pat.replace(/[.+]/g, "\\$&").replace(/\*/g, ".*") + "$");
+  let files: string[];
+  try {
+    files = readdirSync(join(anchor, dir)).filter((f) => rx.test(f)).sort();
+  } catch {
+    return [];
+  }
+  const out: Front[] = [];
+  for (const f of files) {
+    let text: string;
+    try {
+      text = readFileSync(join(anchor, dir, f), "utf8");
+    } catch {
+      continue;
+    }
+    const nameM = text.match(/^#\s*(.+?)\s*$/m);
+    const descM = text.match(/##\s*description\s*\n+([\s\S]*?)(?:\n##\s|$)/i);
+    out.push({
+      name: (nameM?.[1] ?? f).replace(/\s*\(charter\)\s*$/i, "").trim(),
+      description: (descM?.[1] ?? "").trim().split("\n")[0].trim(),
+    });
+  }
+  return out;
+}
 
 /**
  * Compile targets -- the render/emit stage (Phase 0, 0.2b). A target is a pure
@@ -65,7 +106,7 @@ export function emitDeployScope(resolved: HarnessManifest, kernelVersion: string
  * posture, and the perimeter. The context/charter inlining is the context-bundle
  * target (a follow-on that rewires the existing block compiler).
  */
-export function emitAgentsMd(resolved: HarnessManifest, kernelVersion: string): CompiledArtifact {
+export function emitAgentsMd(resolved: HarnessManifest, kernelVersion: string, anchor?: string): CompiledArtifact {
   const id = resolved.identity;
   const tiers = resolved.routing?.tiers ?? [];
   const overrides = resolved.routing?.overrides ?? {};
@@ -97,13 +138,20 @@ export function emitAgentsMd(resolved: HarnessManifest, kernelVersion: string): 
       : "- no deploy surface.",
     `- excludes: ${(resolved.perimeter?.exclude ?? []).join(", ") || "(none)"}`,
   ];
+
+  const fronts = anchor && resolved.context?.charters ? readCharters(anchor, resolved.context.charters) : [];
+  if (fronts.length) {
+    lines.push("", "## Fronts -- the org chart (generated from the charters)");
+    for (const fr of fronts) lines.push(`- **${fr.name}** -- ${fr.description}`);
+  }
+
   const content = lines.join("\n") + "\n";
   return {
     target: "agents-md",
     path: "AGENTS.md",
     content,
     hash: sha256(content),
-    provenance: { kernel: kernelVersion, from: ["identity", "routing", "evaluation.gates", "safety", "perimeter"] },
+    provenance: { kernel: kernelVersion, from: ["identity", "routing", "evaluation.gates", "safety", "perimeter", "context.charters"] },
   };
 }
 
@@ -169,9 +217,10 @@ export function compileTargets(
   resolved: HarnessManifest,
   kernelVersion: string,
   tierRegistry: Readonly<Record<string, TierEntry>>,
+  anchor?: string,
 ): CompiledArtifact[] {
   const out: CompiledArtifact[] = [];
-  out.push(emitAgentsMd(resolved, kernelVersion));
+  out.push(emitAgentsMd(resolved, kernelVersion, anchor));
   if (resolved.routing?.tiers?.length) out.push(emitTierTable(resolved, tierRegistry, kernelVersion));
   if (resolved.tools) out.push(emitToolSet(resolved, kernelVersion));
   if (resolved.perimeter?.deploy) out.push(emitDeployScope(resolved, kernelVersion));

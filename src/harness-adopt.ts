@@ -69,8 +69,9 @@ export function adopt(manifestPath: string, opts: AdoptOptions = {}): AdoptResul
   const res = resolveProject(KERNEL_DEFAULTS, load.manifest);
   if (!res.resolved) return { artifacts: [], written: [], errors: res.errors };
 
-  const artifacts = compileTargets(res.resolved, KERNEL_VERSION, KERNEL_TIER_REGISTRY);
-  const targetRoot = opts.targetRoot ?? dirname(manifestPath);
+  const anchor = dirname(manifestPath);
+  const artifacts = compileTargets(res.resolved, KERNEL_VERSION, KERNEL_TIER_REGISTRY, anchor);
+  const targetRoot = opts.targetRoot ?? anchor;
 
   let written: readonly string[] = [];
   let errors: readonly string[] = [];
