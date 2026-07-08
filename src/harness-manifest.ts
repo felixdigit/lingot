@@ -108,7 +108,8 @@ export interface ReliabilityBlock {
 export interface PerimeterBlock {
   readonly anchor?: string;
   readonly exclude?: readonly string[];
-  readonly deploy?: { readonly scope?: string; readonly surface?: string };
+  /** deploy.root: where the deploy uploads from, relative to the anchor (e.g. "../.." for a repo-root deploy). Default ".". */
+  readonly deploy?: { readonly scope?: string; readonly surface?: string; readonly root?: string };
   readonly public_serve?: { readonly allow?: readonly string[] };
 }
 

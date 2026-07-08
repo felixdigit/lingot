@@ -38,19 +38,23 @@ function sha256(s: string): string {
  */
 export function emitDeployScope(resolved: HarnessManifest, kernelVersion: string): CompiledArtifact {
   const excludes = resolved.perimeter?.exclude ?? [];
+  const deployRoot = resolved.perimeter?.deploy?.root ?? ".";
+  // The ignore file lands at the deploy root (where the deploy actually uploads
+  // from), relative to the anchor -- e.g. "../.." for a repo-root Vercel deploy.
+  const path = deployRoot === "." ? ".vercelignore" : `${deployRoot.replace(/\/+$/, "")}/.vercelignore`;
   const lines = [
     DO_NOT_EDIT,
-    `# Source: perimeter.exclude (${excludes.length} pattern(s)) + kernel ${kernelVersion}`,
+    `# Source: agency perimeter.exclude (${excludes.length} pattern(s)) + kernel ${kernelVersion}`,
     "",
     ...excludes,
   ];
   const content = lines.join("\n") + "\n";
   return {
     target: "deploy-scope",
-    path: ".vercelignore",
+    path,
     content,
     hash: sha256(content),
-    provenance: { kernel: kernelVersion, from: ["perimeter.exclude"] },
+    provenance: { kernel: kernelVersion, from: ["perimeter.exclude", "perimeter.deploy.root"] },
   };
 }
 
