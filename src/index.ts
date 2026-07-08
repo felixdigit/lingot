@@ -32,3 +32,5 @@ export { adopt, materialize } from "./harness-adopt";
 export type { AdoptResult, AdoptOptions, MaterializeResult } from "./harness-adopt";
 export { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
 export type { HarnessDoctorReport, HarnessDoctorFinding, DoctorLevel, DoctorOptions } from "./harness-doctor";
+export { resolveLock, formatLock } from "./harness-lock";
+export type { HarnessLock, LockResult } from "./harness-lock";

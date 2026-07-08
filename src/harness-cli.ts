@@ -1,8 +1,9 @@
-import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { adopt } from "./harness-adopt";
 import { formatVerdict } from "./harness-verdict";
 import { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
+import { resolveLock, formatLock } from "./harness-lock";
 
 /**
  * The harness CLI (Phase 0, 0.3c) -- the terminal operator surface
@@ -18,7 +19,9 @@ import { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
  */
 
 function usage(): never {
-  console.log("usage: harness boot <dir|manifest> [--dry] | harness adopt <dir|manifest> | harness doctor <dir|manifest>");
+  console.log(
+    "usage: harness boot <dir|manifest> [--dry] | harness adopt <dir|manifest> | harness doctor <dir|manifest> | harness lock <dir|manifest>",
+  );
   process.exit(2);
 }
 
@@ -74,6 +77,24 @@ if (command === "boot" || command === "adopt") {
   const report = doctorProject(manifestPath);
   console.log(formatHarnessDoctorReport(report));
   process.exit(report.verdict === "red" ? 1 : 0);
+} else if (command === "lock") {
+  const target = positional[0];
+  if (!target) usage();
+  const manifestPath = resolveManifestPath(target);
+  if (!manifestPath) {
+    console.error(`no harness/v1 manifest found at ${target} (expected a harness.json, or a dir containing one)`);
+    process.exit(1);
+  }
+  const { lock, errors } = resolveLock(manifestPath);
+  if (!lock) {
+    for (const e of errors) console.error(`  - ${e}`);
+    process.exit(1);
+  }
+  const lockPath = join(dirname(manifestPath), "harness.lock");
+  writeFileSync(lockPath, formatLock(lock));
+  console.log(`locked ${lock.project}: pin ${lock.pin} -> kernel ${lock.kernel}`);
+  console.log(`  wrote ${lockPath}`);
+  process.exit(0);
 } else {
   usage();
 }
