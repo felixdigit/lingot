@@ -27,3 +27,5 @@ export { emitDeployScope, compileTargets } from "./harness-emit";
 export type { CompiledArtifact } from "./harness-emit";
 export { computeVerdict, formatVerdict } from "./harness-verdict";
 export type { Verdict, VerdictCheck, VerdictLevel, CheckStatus, VerdictProbes } from "./harness-verdict";
+export { adopt, materialize } from "./harness-adopt";
+export type { AdoptResult, AdoptOptions, MaterializeResult } from "./harness-adopt";
