@@ -34,3 +34,5 @@ export { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
 export type { HarnessDoctorReport, HarnessDoctorFinding, DoctorLevel, DoctorOptions } from "./harness-doctor";
 export { resolveLock, formatLock } from "./harness-lock";
 export type { HarnessLock, LockResult } from "./harness-lock";
+export { resolveSecret, makeSecretResolver, envSource, keychainSource } from "./harness-secrets";
+export type { SecretSource } from "./harness-secrets";

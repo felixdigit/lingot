@@ -2,6 +2,7 @@ import { loadHarnessManifest } from "./harness-manifest";
 import { resolveProject } from "./harness-merge";
 import { KERNEL_DEFAULTS, KERNEL_VERSION, KERNEL_TIER_REGISTRY } from "./harness-kernel";
 import { compileTargets } from "./harness-emit";
+import { resolveSecret as machineLocalResolveSecret } from "./harness-secrets";
 
 /**
  * The harness/v1 doctor (Phase 0, 0.4) -- the STANDING conformance verdict
@@ -39,11 +40,6 @@ export interface DoctorOptions {
   readonly resolveSecret?: (name: string) => boolean;
 }
 
-const envHasSecret = (name: string): boolean => {
-  const v = process.env[name];
-  return typeof v === "string" && v.length > 0;
-};
-
 export function doctorProject(manifestPath: string, opts: DoctorOptions = {}): HarnessDoctorReport {
   const findings: HarnessDoctorFinding[] = [];
   const load = loadHarnessManifest(manifestPath);
@@ -76,7 +72,7 @@ export function doctorProject(manifestPath: string, opts: DoctorOptions = {}): H
   if (badTiers.length) findings.push({ check: "tiers", level: "red", message: `routing.tiers reference unknown alias(es): ${badTiers.join(", ")}` });
 
   // secrets: every ref resolves machine-local.
-  const resolveSecret = opts.resolveSecret ?? envHasSecret;
+  const resolveSecret = opts.resolveSecret ?? machineLocalResolveSecret;
   const refs = resolved.secrets?.refs ?? [];
   const unresolved = refs.filter((r) => !resolveSecret(r));
   if (unresolved.length) findings.push({ check: "secrets", level: "red", message: `secrets.refs not resolvable machine-local: ${unresolved.join(", ")}` });

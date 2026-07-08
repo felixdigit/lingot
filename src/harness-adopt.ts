@@ -5,6 +5,7 @@ import { resolveProject } from "./harness-merge";
 import { KERNEL_DEFAULTS, KERNEL_VERSION, KERNEL_TIER_REGISTRY } from "./harness-kernel";
 import { compileTargets, type CompiledArtifact } from "./harness-emit";
 import { computeVerdict, type Verdict, type VerdictProbes } from "./harness-verdict";
+import { resolveSecret } from "./harness-secrets";
 
 /**
  * The adopter (Phase 0, 0.3b) -- the executed switch (docs/harness/05). Load ->
@@ -81,8 +82,13 @@ export function adopt(manifestPath: string, opts: AdoptOptions = {}): AdoptResul
     errors = m.errors;
   }
 
-  // The registry-backed tier resolver is always on; callers may add secret/MCP probes.
-  const probes = { resolveTier: (alias: string) => alias in KERNEL_TIER_REGISTRY, ...opts.probes };
+  // The registry-backed tier resolver + the machine-local secret resolver are
+  // always on; callers may override or add probes (e.g. an MCP reachability probe).
+  const probes = {
+    resolveTier: (alias: string) => alias in KERNEL_TIER_REGISTRY,
+    resolveSecret,
+    ...opts.probes,
+  };
   const verdict = computeVerdict(res.resolved, KERNEL_VERSION, artifacts, probes);
   return { verdict, artifacts, written, errors };
 }
