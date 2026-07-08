@@ -4,6 +4,7 @@ import { adopt } from "./harness-adopt";
 import { formatVerdict } from "./harness-verdict";
 import { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
 import { resolveLock, formatLock } from "./harness-lock";
+import { recordGatePass } from "./harness-gates";
 
 /**
  * The harness CLI (Phase 0, 0.3c) -- the terminal operator surface
@@ -20,7 +21,7 @@ import { resolveLock, formatLock } from "./harness-lock";
 
 function usage(): never {
   console.log(
-    "usage: harness boot <dir|manifest> [--dry] | harness adopt <dir|manifest> | harness doctor <dir|manifest> | harness lock <dir|manifest>",
+    "usage: harness boot <dir|manifest> [--dry] | harness adopt <dir|manifest> | harness doctor <dir|manifest> | harness lock <dir|manifest> | harness gate-pass <dir|manifest> <suite> [--by <who>]",
   );
   process.exit(2);
 }
@@ -94,6 +95,20 @@ if (command === "boot" || command === "adopt") {
   writeFileSync(lockPath, formatLock(lock));
   console.log(`locked ${lock.project}: pin ${lock.pin} -> kernel ${lock.kernel}`);
   console.log(`  wrote ${lockPath}`);
+  process.exit(0);
+} else if (command === "gate-pass") {
+  const target = positional[0];
+  const suite = positional[1];
+  if (!target || !suite) usage();
+  const manifestPath = resolveManifestPath(target);
+  if (!manifestPath) {
+    console.error(`no harness/v1 manifest found at ${target}`);
+    process.exit(1);
+  }
+  const byIdx = args.indexOf("--by");
+  const by = byIdx !== -1 ? args[byIdx + 1] : undefined;
+  recordGatePass(dirname(manifestPath), suite, by);
+  console.log(`gate-pass recorded: ${suite}${by ? ` (by ${by})` : ""}`);
   process.exit(0);
 } else {
   usage();

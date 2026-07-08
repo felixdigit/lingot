@@ -6,6 +6,7 @@ import { KERNEL_DEFAULTS, KERNEL_VERSION, KERNEL_TIER_REGISTRY } from "./harness
 import { compileTargets, type CompiledArtifact } from "./harness-emit";
 import { computeVerdict, type Verdict, type VerdictProbes } from "./harness-verdict";
 import { resolveSecret } from "./harness-secrets";
+import { unmetPromoteGates } from "./harness-gates";
 
 /**
  * The adopter (Phase 0, 0.3b) -- the executed switch (docs/harness/05). Load ->
@@ -74,19 +75,30 @@ export function adopt(manifestPath: string, opts: AdoptOptions = {}): AdoptResul
   const artifacts = compileTargets(res.resolved, KERNEL_VERSION, KERNEL_TIER_REGISTRY, anchor);
   const targetRoot = opts.targetRoot ?? anchor;
 
+  // Eval gate (A9): a declared promote-gate that is not recorded-passed makes
+  // the artifacts NOT-ADOPTABLE -- the adopter refuses to materialize (holds).
+  const unmetGates = unmetPromoteGates(res.resolved, anchor);
+
   let written: readonly string[] = [];
   let errors: readonly string[] = [];
   if (opts.write !== false) {
-    const m = materialize(artifacts, targetRoot);
-    written = m.written;
-    errors = m.errors;
+    if (unmetGates.length > 0) {
+      errors = [
+        `held: promote gate(s) not passed: ${unmetGates.join(", ")} -- record a pass (\`harness gate-pass\`) before adopting`,
+      ];
+    } else {
+      const m = materialize(artifacts, targetRoot);
+      written = m.written;
+      errors = m.errors;
+    }
   }
 
-  // The registry-backed tier resolver + the machine-local secret resolver are
-  // always on; callers may override or add probes (e.g. an MCP reachability probe).
+  // The registry-backed tier resolver + the machine-local secret resolver + the
+  // gate status are always on; callers may override or add probes (e.g. MCP).
   const probes = {
     resolveTier: (alias: string) => alias in KERNEL_TIER_REGISTRY,
     resolveSecret,
+    unmetGates,
     ...opts.probes,
   };
   const verdict = computeVerdict(res.resolved, KERNEL_VERSION, artifacts, probes);

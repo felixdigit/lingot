@@ -35,6 +35,8 @@ export interface VerdictProbes {
   readonly probeMcp?: (server: string) => boolean;
   /** Tier resolver (against the kernel tier registry). Returns whether an alias resolves. */
   readonly resolveTier?: (alias: string) => boolean;
+  /** Declared promote-gates not yet passed (docs/harness/16). Non-empty -> BLOCKED (not-adoptable). */
+  readonly unmetGates?: readonly string[];
 }
 
 /**
@@ -54,6 +56,10 @@ export function computeVerdict(
   if (!enabled) return { project, kernel: kernelVersion, enabled, checks: [], level: "OFF" };
 
   const checks: VerdictCheck[] = [];
+
+  if (probes.unmetGates && probes.unmetGates.length > 0) {
+    checks.push({ name: "gates", status: "blocked", detail: `promote gate(s) not passed: ${probes.unmetGates.join(",")}` });
+  }
 
   const blocks = resolved.context?.blocks ?? [];
   checks.push({ name: "context", status: blocks.length ? "ok" : "skipped", detail: `${blocks.length} block(s)` });

@@ -36,3 +36,5 @@ export { resolveLock, formatLock } from "./harness-lock";
 export type { HarnessLock, LockResult } from "./harness-lock";
 export { resolveSecret, makeSecretResolver, envSource, keychainSource } from "./harness-secrets";
 export type { SecretSource } from "./harness-secrets";
+export { readGateLedger, recordGatePass, unmetPromoteGates } from "./harness-gates";
+export type { GateRecord, GateLedger } from "./harness-gates";
