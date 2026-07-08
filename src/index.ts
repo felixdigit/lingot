@@ -38,3 +38,5 @@ export { resolveSecret, makeSecretResolver, envSource, keychainSource } from "./
 export type { SecretSource } from "./harness-secrets";
 export { readGateLedger, recordGatePass, unmetPromoteGates } from "./harness-gates";
 export type { GateRecord, GateLedger } from "./harness-gates";
+export { tierEnv, formatTierEnv } from "./harness-dispatch";
+export type { TierEnvResult } from "./harness-dispatch";

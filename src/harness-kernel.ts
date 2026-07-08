@@ -24,16 +24,28 @@ export interface TierEntry {
   readonly model: string;
   readonly transport: "native" | "gateway";
   readonly role: "judgment" | "labor";
+  /** Native non-Anthropic endpoint (e.g. Z.ai): the env var holding the auth token. */
+  readonly tokenEnv?: string;
+  /** Native non-Anthropic endpoint: the fixed base URL. */
+  readonly baseUrl?: string;
+  /** Reach via the self-hosted LiteLLM gateway (OpenAI-only providers: Grok, vLLM). */
+  readonly gateway?: boolean;
 }
 
 export const KERNEL_TIER_REGISTRY: Readonly<Record<string, TierEntry>> = {
+  // Anthropic native -- session default creds (no base-URL override; in-session via the Agent tool).
   reason: { provider: "anthropic", model: "opus-4.8 / fable", transport: "native", role: "judgment" },
   scoped: { provider: "anthropic", model: "sonnet", transport: "native", role: "judgment" },
   mechanical: { provider: "anthropic", model: "haiku", transport: "native", role: "labor" },
-  bulk: { provider: "zai", model: "glm-5.2 / glm-4.7", transport: "native", role: "labor" },
-  "fast-cheap": { provider: "xai", model: "grok-4.1-fast", transport: "gateway", role: "labor" },
-  "frontier-alt": { provider: "xai", model: "grok-4.5", transport: "gateway", role: "judgment" },
-  beast: { provider: "runpod", model: "open-weight (vllm)", transport: "gateway", role: "labor" },
+  // Z.ai GLM -- native Anthropic-compatible endpoint, own token (no gateway).
+  bulk: {
+    provider: "zai", model: "glm-5.2", transport: "native", role: "labor",
+    tokenEnv: "ZAI_API_KEY", baseUrl: "https://api.z.ai/api/anthropic",
+  },
+  // xAI Grok + RunPod vLLM -- OpenAI-only, reached through the LiteLLM gateway.
+  "fast-cheap": { provider: "xai", model: "grok-4.1-fast", transport: "gateway", role: "labor", gateway: true },
+  "frontier-alt": { provider: "xai", model: "grok-4.5", transport: "gateway", role: "judgment", gateway: true },
+  beast: { provider: "runpod", model: "open-weight (vllm)", transport: "gateway", role: "labor", gateway: true },
 };
 
 export const KERNEL_DEFAULTS: Partial<HarnessManifest> = {

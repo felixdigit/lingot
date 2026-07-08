@@ -1,6 +1,8 @@
 import { existsSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { adopt } from "./harness-adopt";
+import { tierEnv, formatTierEnv } from "./harness-dispatch";
 import { formatVerdict } from "./harness-verdict";
 import { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
 import { resolveLock, formatLock } from "./harness-lock";
@@ -21,7 +23,15 @@ import { recordGatePass } from "./harness-gates";
 
 function usage(): never {
   console.log(
-    "usage: harness boot <dir|manifest> [--dry] | harness adopt <dir|manifest> | harness doctor <dir|manifest> | harness lock <dir|manifest> | harness gate-pass <dir|manifest> <suite> [--by <who>]",
+    [
+      "usage:",
+      "  harness boot <dir|manifest> [--dry]",
+      "  harness adopt <dir|manifest>",
+      "  harness doctor <dir|manifest>",
+      "  harness lock <dir|manifest>",
+      "  harness gate-pass <dir|manifest> <suite> [--by <who>]",
+      "  harness run --tier <alias> [-- <cmd...>]",
+    ].join("\n"),
   );
   process.exit(2);
 }
@@ -110,6 +120,24 @@ if (command === "boot" || command === "adopt") {
   recordGatePass(dirname(manifestPath), suite, by);
   console.log(`gate-pass recorded: ${suite}${by ? ` (by ${by})` : ""}`);
   process.exit(0);
+} else if (command === "run") {
+  const tierIdx = args.indexOf("--tier");
+  const alias = tierIdx !== -1 ? args[tierIdx + 1] : undefined;
+  if (!alias) usage();
+  const resolved = tierEnv(alias);
+  if (resolved.missing && resolved.missing.length > 0) {
+    console.error(formatTierEnv(resolved));
+    process.exit(1);
+  }
+  const sep = args.indexOf("--");
+  const cmd = sep !== -1 ? args.slice(sep + 1) : [];
+  if (cmd.length === 0) {
+    console.log(formatTierEnv(resolved));
+    console.log("  (dry run -- pass `-- <command>` to launch it on this tier)");
+    process.exit(0);
+  }
+  const res = spawnSync(cmd[0], cmd.slice(1), { stdio: "inherit", env: { ...process.env, ...resolved.env } });
+  process.exit(res.status ?? 1);
 } else {
   usage();
 }
