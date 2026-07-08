@@ -20,3 +20,5 @@ export { compileHarness, diffHarness, replayPack, renderTemplate, formatDrift, f
 export type { CompileResult, DriftReport, FileDrift, ReplayResult, RubricPoint } from "./harness-compile";
 export { loadHarnessManifest, isHarnessManifest, HARNESS_SCHEMA_TAG } from "./harness-manifest";
 export type { HarnessManifest, HarnessManifestLoadResult, Identity, KernelPin, LoopBinding, RoutingBlock, ContextBlock, ToolsBlock, OrchestrationBlock, StateBlock, ObservabilityBlock, EvaluationBlock, SafetyBlock, SecretsBlock, ReliabilityBlock, PerimeterBlock, Automation, AuthoringBlock } from "./harness-manifest";
+export { deepMerge, enforceManagedBand, resolveProject, MANAGED_PATHS } from "./harness-merge";
+export type { ResolveResult } from "./harness-merge";
