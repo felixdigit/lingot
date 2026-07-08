@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { loadHarnessManifest } from "./harness-manifest";
 import { resolveProject } from "./harness-merge";
-import { KERNEL_DEFAULTS, KERNEL_VERSION } from "./harness-kernel";
+import { KERNEL_DEFAULTS, KERNEL_VERSION, KERNEL_TIER_REGISTRY } from "./harness-kernel";
 import { compileTargets, type CompiledArtifact } from "./harness-emit";
 import { computeVerdict, type Verdict, type VerdictProbes } from "./harness-verdict";
 
@@ -69,7 +69,7 @@ export function adopt(manifestPath: string, opts: AdoptOptions = {}): AdoptResul
   const res = resolveProject(KERNEL_DEFAULTS, load.manifest);
   if (!res.resolved) return { artifacts: [], written: [], errors: res.errors };
 
-  const artifacts = compileTargets(res.resolved, KERNEL_VERSION);
+  const artifacts = compileTargets(res.resolved, KERNEL_VERSION, KERNEL_TIER_REGISTRY);
   const targetRoot = opts.targetRoot ?? dirname(manifestPath);
 
   let written: readonly string[] = [];
@@ -80,6 +80,8 @@ export function adopt(manifestPath: string, opts: AdoptOptions = {}): AdoptResul
     errors = m.errors;
   }
 
-  const verdict = computeVerdict(res.resolved, KERNEL_VERSION, artifacts, opts.probes);
+  // The registry-backed tier resolver is always on; callers may add secret/MCP probes.
+  const probes = { resolveTier: (alias: string) => alias in KERNEL_TIER_REGISTRY, ...opts.probes };
+  const verdict = computeVerdict(res.resolved, KERNEL_VERSION, artifacts, probes);
   return { verdict, artifacts, written, errors };
 }

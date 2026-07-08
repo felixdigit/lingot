@@ -33,6 +33,8 @@ export interface VerdictProbes {
   readonly resolveSecret?: (name: string) => boolean;
   /** MCP reachability probe. Returns whether a server is reachable. */
   readonly probeMcp?: (server: string) => boolean;
+  /** Tier resolver (against the kernel tier registry). Returns whether an alias resolves. */
+  readonly resolveTier?: (alias: string) => boolean;
 }
 
 /**
@@ -57,11 +59,21 @@ export function computeVerdict(
   checks.push({ name: "context", status: blocks.length ? "ok" : "skipped", detail: `${blocks.length} block(s)` });
 
   const tiers = resolved.routing?.tiers ?? [];
-  checks.push({
-    name: "tiers",
-    status: tiers.length ? "ok" : "blocked",
-    detail: tiers.length ? `${tiers.length} resolvable (${tiers.join(",")})` : "no tiers declared or inherited",
-  });
+  if (!tiers.length) {
+    checks.push({ name: "tiers", status: "blocked", detail: "no tiers declared or inherited" });
+  } else if (probes.resolveTier) {
+    const bad = tiers.filter((t) => !probes.resolveTier!(t));
+    const def = resolved.routing?.default;
+    const defBad = def ? !probes.resolveTier(def) : false;
+    const status: CheckStatus = bad.length === 0 ? "ok" : defBad || bad.length === tiers.length ? "blocked" : "degraded";
+    checks.push({
+      name: "tiers",
+      status,
+      detail: bad.length === 0 ? `${tiers.length} resolvable (${tiers.join(",")})` : `unresolvable: ${bad.join(",")}`,
+    });
+  } else {
+    checks.push({ name: "tiers", status: "skipped", detail: `${tiers.length} declared, registry not wired` });
+  }
 
   if (resolved.perimeter?.deploy) {
     const hasArtifact = artifacts.some((a) => a.target === "deploy-scope");

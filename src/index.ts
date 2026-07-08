@@ -22,8 +22,9 @@ export { loadHarnessManifest, isHarnessManifest, HARNESS_SCHEMA_TAG } from "./ha
 export type { HarnessManifest, HarnessManifestLoadResult, Identity, KernelPin, LoopBinding, RoutingBlock, ContextBlock, ToolsBlock, OrchestrationBlock, StateBlock, ObservabilityBlock, EvaluationBlock, SafetyBlock, SecretsBlock, ReliabilityBlock, PerimeterBlock, Automation, AuthoringBlock } from "./harness-manifest";
 export { deepMerge, enforceManagedBand, resolveProject, MANAGED_PATHS } from "./harness-merge";
 export type { ResolveResult } from "./harness-merge";
-export { KERNEL_DEFAULTS, KERNEL_VERSION } from "./harness-kernel";
-export { emitDeployScope, compileTargets } from "./harness-emit";
+export { KERNEL_DEFAULTS, KERNEL_VERSION, KERNEL_TIER_REGISTRY } from "./harness-kernel";
+export type { TierEntry } from "./harness-kernel";
+export { emitDeployScope, emitAgentsMd, emitTierTable, emitToolSet, compileTargets } from "./harness-emit";
 export type { CompiledArtifact } from "./harness-emit";
 export { computeVerdict, formatVerdict } from "./harness-verdict";
 export type { Verdict, VerdictCheck, VerdictLevel, CheckStatus, VerdictProbes } from "./harness-verdict";
