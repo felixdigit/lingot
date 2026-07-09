@@ -1,6 +1,30 @@
-import { existsSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, statSync, writeFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
+
+/**
+ * Load the repo-root .env into process.env so machine-local secrets pasted there
+ * (ZAI_API_KEY, LITELLM_*, ...) are seen by the resolver -- no `export` needed.
+ * Minimal parser, no dependency; never overrides an already-set env var; strips
+ * surrounding quotes; ignores comments/blanks. Missing .env is fine.
+ */
+function loadDotEnv(): void {
+  try {
+    const text = readFileSync(join(process.cwd(), ".env"), "utf8");
+    for (const line of text.split("\n")) {
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+      if (!m) continue;
+      let val = m[2];
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (process.env[m[1]] === undefined && val !== "") process.env[m[1]] = val;
+    }
+  } catch {
+    /* no .env at cwd -- fine */
+  }
+}
+loadDotEnv();
 import { adopt } from "./harness-adopt";
 import { tierEnv, formatTierEnv } from "./harness-dispatch";
 import { formatVerdict } from "./harness-verdict";
