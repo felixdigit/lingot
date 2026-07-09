@@ -1,8 +1,9 @@
 {
   "name": "@nexod/lingot-policy",
   "version": "0.1.0",
-  "private": false,
+  "private": true,
   "type": "module",
+  "description": "Lingot -- the Nexod harness compiler: one kernel, per-repo manifests, tier routing, the harness CLI.",
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -11,21 +12,27 @@
   },
   "files": [
     "src",
+    "gateway",
+    "kernel",
     "README.md"
   ],
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org",
-    "access": "public"
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "test": "vitest run",
+    "harness": "tsx src/harness-cli.ts"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/felixdigit/nexod.git",
-    "directory": "engine/lingot"
+    "url": "https://github.com/felixdigit/lingot.git"
   },
   "dependencies": {
     "yaml": "^2.7.0"
   },
   "devDependencies": {
-    "typescript": "^5"
+    "@types/node": "^22",
+    "typescript": "^5",
+    "tsx": "^4.19.0",
+    "vitest": "^2.1.0"
   }
 }

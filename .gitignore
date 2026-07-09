@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Harness volatile ledgers (runtime data, not compiled artifacts)
+.harness/usage.jsonl
+.harness/gates.json
+.harness/automations.jsonl
