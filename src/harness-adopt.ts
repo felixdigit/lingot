@@ -4,7 +4,7 @@ import { loadHarnessManifest } from "./harness-manifest";
 import { resolveProject } from "./harness-merge";
 import { KERNEL_DEFAULTS, KERNEL_VERSION, KERNEL_TIER_REGISTRY } from "./harness-kernel";
 import { compileTargets, type CompiledArtifact } from "./harness-emit";
-import { computeVerdict, type Verdict, type VerdictProbes } from "./harness-verdict";
+import { computeVerdict, makeMcpProbe, type Verdict, type VerdictProbes } from "./harness-verdict";
 import { resolveSecret } from "./harness-secrets";
 import { unmetPromoteGates } from "./harness-gates";
 
@@ -99,6 +99,7 @@ export function adopt(manifestPath: string, opts: AdoptOptions = {}): AdoptResul
     resolveTier: (alias: string) => alias in KERNEL_TIER_REGISTRY,
     resolveSecret,
     unmetGates,
+    probeMcp: makeMcpProbe(anchor),
     ...opts.probes,
   };
   const verdict = computeVerdict(res.resolved, KERNEL_VERSION, artifacts, probes);

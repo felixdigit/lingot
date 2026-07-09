@@ -1,5 +1,36 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
 import type { HarnessManifest } from "./harness-manifest";
 import type { CompiledArtifact } from "./harness-emit";
+
+/**
+ * A structural MCP probe: a declared server is "reachable" when it is CONFIGURED
+ * in the nearest .mcp.json (anchor, then walking up to the repo root). Not a live
+ * spawn -- it catches the common drift where the manifest declares an MCP server
+ * that no .mcp.json defines. Wiring this turns the verdict's mcp line from
+ * "pending" into a real check.
+ */
+export function makeMcpProbe(anchor: string): (server: string) => boolean {
+  let dir = anchor;
+  let keys: string[] = [];
+  for (let i = 0; i < 8; i++) {
+    const p = join(dir, ".mcp.json");
+    if (existsSync(p)) {
+      try {
+        const doc = JSON.parse(readFileSync(p, "utf8"));
+        keys = Object.keys(doc?.mcpServers ?? {});
+      } catch {
+        keys = [];
+      }
+      break;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  const set = new Set(keys);
+  return (server: string) => set.has(server);
+}
 
 /**
  * The connectivity verdict (Phase 0, 0.3a) -- the "am I wired?" readout the

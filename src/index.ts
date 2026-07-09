@@ -26,7 +26,7 @@ export { KERNEL_DEFAULTS, KERNEL_VERSION, KERNEL_TIER_REGISTRY } from "./harness
 export type { TierEntry } from "./harness-kernel";
 export { emitDeployScope, emitAgentsMd, emitTierTable, emitToolSet, compileTargets } from "./harness-emit";
 export type { CompiledArtifact } from "./harness-emit";
-export { computeVerdict, formatVerdict } from "./harness-verdict";
+export { computeVerdict, formatVerdict, makeMcpProbe } from "./harness-verdict";
 export type { Verdict, VerdictCheck, VerdictLevel, CheckStatus, VerdictProbes } from "./harness-verdict";
 export { adopt, materialize } from "./harness-adopt";
 export type { AdoptResult, AdoptOptions, MaterializeResult } from "./harness-adopt";

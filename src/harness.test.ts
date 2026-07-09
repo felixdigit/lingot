@@ -4,6 +4,11 @@ import { isHarnessManifest } from "./harness-manifest";
 import { tierEnv, formatTierEnv } from "./harness-dispatch";
 import type { TierEntry } from "./harness-kernel";
 import { summarizeUsage, estimateCostUsd } from "./harness-usage";
+import { matchesExpect } from "./harness-eval";
+import { makeMcpProbe } from "./harness-verdict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 describe("deepMerge (kernel (+) overlay)", () => {
   it("scalars override, arrays concat + dedup, objects deep-merge; overlay wins", () => {
@@ -83,5 +88,25 @@ describe("cost", () => {
     expect(s.byRole).toEqual({ judgment: 1, labor: 2 });
     expect(s.totalCostUsd).toBeCloseTo(0.53, 6);
     expect(s.costByTier).toEqual({ bulk: 0.03, reason: 0.5 });
+  });
+});
+
+describe("matchesExpect (eval scoring)", () => {
+  it("substring by default, /regex/flags when slash-wrapped, false on a bad regex", () => {
+    expect(matchesExpect("hello world", "world")).toBe(true);
+    expect(matchesExpect("hello world", "nope")).toBe(false);
+    expect(matchesExpect("PONG-42", "/pong-\\d+/i")).toBe(true);
+    expect(matchesExpect("abc", "/[/")).toBe(false);
+  });
+});
+
+describe("makeMcpProbe (structural mcp reachability)", () => {
+  it("a declared server is reachable iff configured in the nearest .mcp.json", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-"));
+    writeFileSync(join(dir, ".mcp.json"), JSON.stringify({ mcpServers: { supabase: {}, "agency-brain": {} } }));
+    const probe = makeMcpProbe(dir);
+    expect(probe("supabase")).toBe(true);
+    expect(probe("agency-brain")).toBe(true);
+    expect(probe("nonexistent")).toBe(false);
   });
 });
