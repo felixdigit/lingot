@@ -1,4 +1,34 @@
+import { spawnSync } from "node:child_process";
 import { KERNEL_TIER_REGISTRY, type TierEntry } from "./harness-kernel";
+import { estimateCostUsd } from "./harness-usage";
+
+export interface MeasuredRun {
+  readonly text: string;
+  readonly inTokens: number;
+  readonly outTokens: number;
+  readonly costUsd: number;
+  readonly exit: number;
+}
+
+/**
+ * Run a headless `claude -p <prompt>` with a tier's env and capture usage/cost
+ * (via --output-format json). Reused by `harness run` (single) and `harness
+ * batch` (fan-out). Never returns a token value; returns the result text +
+ * token counts + estimated cost.
+ */
+export function measuredClaudeRun(prompt: string, env: NodeJS.ProcessEnv, price?: { in: number; out: number }): MeasuredRun {
+  const r = spawnSync("claude", ["-p", "--output-format", "json", prompt], { encoding: "utf8", env });
+  let inTokens = 0, outTokens = 0, text = r.stdout ?? "";
+  try {
+    const j = JSON.parse(r.stdout ?? "{}");
+    text = j.result ?? text;
+    inTokens = (j.usage?.input_tokens ?? 0) + (j.usage?.cache_read_input_tokens ?? 0) + (j.usage?.cache_creation_input_tokens ?? 0);
+    outTokens = j.usage?.output_tokens ?? 0;
+  } catch {
+    /* not json -- return raw text, zero tokens */
+  }
+  return { text, inTokens, outTokens, costUsd: estimateCostUsd(inTokens, outTokens, price), exit: r.status ?? 0 };
+}
 
 /**
  * The launch shim (Phase 4, docs/harness/04) -- resolve a tier alias into the
