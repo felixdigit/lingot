@@ -40,6 +40,8 @@ export { readGateLedger, recordGatePass, unmetPromoteGates } from "./harness-gat
 export type { GateRecord, GateLedger } from "./harness-gates";
 export { runEval, formatEvalReport, matchesExpect } from "./harness-eval";
 export type { EvalCase, EvalCaseResult, EvalReport } from "./harness-eval";
+export { isEligible, missingBoxes, statusOf, formatAutomations, fireAutomation } from "./harness-automate";
+export type { AutomationStatus, FireResult } from "./harness-automate";
 export { tierEnv, formatTierEnv, measuredClaudeRun, leanRun } from "./harness-dispatch";
 export type { TierEnvResult, MeasuredRun } from "./harness-dispatch";
 export { recordDispatch, readUsage, summarizeUsage, formatUsage, estimateCostUsd } from "./harness-usage";

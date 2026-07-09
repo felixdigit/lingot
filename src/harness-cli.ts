@@ -33,7 +33,10 @@ import { resolveLock, formatLock } from "./harness-lock";
 import { recordGatePass } from "./harness-gates";
 import { runEval, formatEvalReport } from "./harness-eval";
 import { recordDispatch, readUsage, summarizeUsage, formatUsage } from "./harness-usage";
-import { KERNEL_TIER_REGISTRY } from "./harness-kernel";
+import { KERNEL_TIER_REGISTRY, KERNEL_DEFAULTS } from "./harness-kernel";
+import { loadHarnessManifest } from "./harness-manifest";
+import { resolveProject } from "./harness-merge";
+import { formatAutomations, fireAutomation } from "./harness-automate";
 
 /**
  * The harness CLI (Phase 0, 0.3c) -- the terminal operator surface
@@ -58,6 +61,7 @@ function usage(): never {
       "  harness lock <dir|manifest>",
       "  harness gate-pass <dir|manifest> <suite> [--by <who>]",
       "  harness eval <dir|manifest> <suite> [--tier <default>]",
+      "  harness automate <dir|manifest> [--fire <name>]",
       "  harness run --tier <alias> [\"<prompt>\"] [--dry] [-- <cmd...>]   (full Claude Code on the tier)",
       "  harness ask --tier <alias> \"<prompt>\"                          (lean: direct model call, no agent context)",
       "  harness batch --tier <alias> --file <tasks.txt> [--out <dir>]   (lean fan-out)",
@@ -305,6 +309,39 @@ if (command === "boot" || command === "adopt") {
   const report = await runEval(dirname(manifestPath), suite, defaultTier);
   console.log(formatEvalReport(report));
   process.exit(report.total > 0 && report.passed === report.total ? 0 : 1);
+} else if (command === "automate") {
+  const target = positional[0];
+  if (!target) {
+    console.error("usage: harness automate <dir|manifest> [--fire <name>]");
+    process.exit(2);
+  }
+  const manifestPath = resolveManifestPath(target);
+  if (!manifestPath) {
+    console.error(`no harness/v1 manifest found at ${target}`);
+    process.exit(1);
+  }
+  const load = loadHarnessManifest(manifestPath);
+  if (!load.manifest) {
+    for (const e of load.errors) console.error(e);
+    process.exit(1);
+  }
+  const res = resolveProject(KERNEL_DEFAULTS, load.manifest);
+  const automations = res.resolved?.automations ?? [];
+  const anchor = dirname(manifestPath);
+  const fireIdx = args.indexOf("--fire");
+  if (fireIdx !== -1) {
+    const name = args[fireIdx + 1];
+    const a = automations.find((x) => x.name === name);
+    if (!a) {
+      console.error(`no automation named "${name}"`);
+      process.exit(1);
+    }
+    const result = fireAutomation(anchor, a);
+    console.error(result.fired ? `fired ${name} -> exit ${result.exit}` : `NOT fired: ${result.reason}`);
+    process.exit(result.fired ? (result.exit ?? 0) : 1);
+  }
+  console.log(formatAutomations(automations));
+  process.exit(0);
 } else {
   usage();
 }

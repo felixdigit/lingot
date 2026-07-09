@@ -148,6 +148,8 @@ export interface Automation {
     readonly end_to_end?: boolean;
     readonly objective_done?: boolean;
   };
+  /** The command a loop runs when fired (e.g. "harness ask --tier bulk ..." or a script). Eligible-only. */
+  readonly run?: string;
 }
 
 /** L11: output targets the compiler emits + the adopter materializes. */

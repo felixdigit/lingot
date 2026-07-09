@@ -6,6 +6,7 @@ import type { TierEntry } from "./harness-kernel";
 import { summarizeUsage, estimateCostUsd } from "./harness-usage";
 import { matchesExpect } from "./harness-eval";
 import { makeMcpProbe } from "./harness-verdict";
+import { isEligible, missingBoxes } from "./harness-automate";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -108,5 +109,18 @@ describe("makeMcpProbe (structural mcp reachability)", () => {
     expect(probe("supabase")).toBe(true);
     expect(probe("agency-brain")).toBe(true);
     expect(probe("nonexistent")).toBe(false);
+  });
+});
+
+describe("automations 4-box eligibility gate", () => {
+  it("all four boxes true -> loop; any missing -> manual, naming the missing box(es)", () => {
+    const full = { name: "x", eligibility: { repeats: true, auto_reject: true, end_to_end: true, objective_done: true }, run: "echo" };
+    expect(isEligible(full)).toBe(true);
+    expect(missingBoxes(full)).toEqual([]);
+    const partial = { name: "y", eligibility: { repeats: true, auto_reject: true } };
+    expect(isEligible(partial)).toBe(false);
+    expect(missingBoxes(partial)).toEqual(["end_to_end", "objective_done"]);
+    expect(isEligible({ name: "z" })).toBe(false);
+    expect(missingBoxes({ name: "z" })).toEqual(["repeats", "auto_reject", "end_to_end", "objective_done"]);
   });
 });
