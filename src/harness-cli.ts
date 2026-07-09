@@ -56,7 +56,7 @@ function usage(): never {
       "  harness doctor <dir|manifest>",
       "  harness lock <dir|manifest>",
       "  harness gate-pass <dir|manifest> <suite> [--by <who>]",
-      "  harness run --tier <alias> [-- <cmd...>]",
+      "  harness run --tier <alias> [\"<prompt>\"] [--dry] [-- <cmd...>]",
       "  harness usage",
     ].join("\n"),
   );
@@ -156,11 +156,29 @@ if (command === "boot" || command === "adopt") {
     console.error(formatTierEnv(resolved));
     process.exit(1);
   }
+  if (flags.has("--dry")) {
+    console.log(formatTierEnv(resolved));
+    process.exit(0);
+  }
+  // What to run on the tier: an explicit command after `--`, else a Claude Code
+  // session on the positional prompt (headless `claude -p <prompt>` with a
+  // prompt, interactive `claude` without).
   const sep = args.indexOf("--");
-  const cmd = sep !== -1 ? args.slice(sep + 1) : [];
+  let cmd: string[];
+  if (sep !== -1) {
+    cmd = args.slice(sep + 1);
+  } else {
+    const promptArgs: string[] = [];
+    for (let i = 1; i < args.length; i++) {
+      if (args[i] === "--tier") { i++; continue; }
+      if (args[i].startsWith("--")) continue;
+      promptArgs.push(args[i]);
+    }
+    const prompt = promptArgs.join(" ").trim();
+    cmd = prompt ? ["claude", "-p", prompt] : ["claude"];
+  }
   if (cmd.length === 0) {
     console.log(formatTierEnv(resolved));
-    console.log("  (dry run -- pass `-- <command>` to launch it on this tier)");
     process.exit(0);
   }
   const res = spawnSync(cmd[0], cmd.slice(1), { stdio: "inherit", env: { ...process.env, ...resolved.env } });
