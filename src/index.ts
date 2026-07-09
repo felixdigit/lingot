@@ -11,7 +11,7 @@ export type {
 export { loadVentureManifest, isVentureManifest, VENTURE_KINDS } from "./venture";
 export type { VentureManifest, VentureKind, InterfaceEdge } from "./venture";
 export { sweep, formatSweepReport } from "./registry";
-export type { Registry, RegistryVenture, RegistryStray, TriageEntry, Finding } from "./registry";
+export type { Registry, RegistryVenture, HarnessVenture, RegistryStray, TriageEntry, Finding } from "./registry";
 export { renderMap } from "./map";
 export type { DbBlock, RepoBlock } from "./venture";
 export { doctorAll, doctorOne, formatDoctorReport, renderBaselineMarkdown, findingKeys, stampReport, verifyReport, reportDigest, CONCERNS, STUDIO_CONCERNS } from "./doctor";

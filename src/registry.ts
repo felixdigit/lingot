@@ -3,6 +3,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
 import { loadVentureManifest, type VentureManifest } from "./venture";
+import { loadHarnessManifest } from "./harness-manifest";
 
 /**
  * `lingot registry --sweep <root>` -- the census.
@@ -24,6 +25,15 @@ export interface RegistryVenture {
   readonly manifestPath: string;
   readonly parkedNote?: string;
   readonly manifest: VentureManifest;
+}
+
+/** A project that has migrated to a harness/v1 manifest (harness.json, no lingot.json). */
+export interface HarnessVenture {
+  readonly name: string;
+  readonly kind: string;
+  readonly owners: readonly string[];
+  readonly relpath: string;
+  readonly manifestPath: string;
 }
 
 export interface TriageEntry {
@@ -51,6 +61,7 @@ export interface Registry {
   readonly root: string;
   readonly tool: string;
   readonly ventures: readonly RegistryVenture[];
+  readonly harnessVentures: readonly HarnessVenture[];
   readonly strays: readonly RegistryStray[];
   readonly findings: readonly Finding[];
   readonly verdict: "green" | "red";
@@ -129,6 +140,7 @@ export function sweep(rootArg: string, opts: { write?: boolean } = {}): Registry
   const root = canonicalPath(rootArg);
   const findings: Finding[] = [];
   const ventures: RegistryVenture[] = [];
+  const harnessVentures: HarnessVenture[] = [];
   const strays: RegistryStray[] = [];
 
   // Pass 1: direct children of the root (the root itself is not a candidate).
@@ -178,6 +190,9 @@ export function sweep(rootArg: string, opts: { write?: boolean } = {}): Registry
     manifested.set(anchor, venture);
     ventures.push(venture);
     if (manifest.identity.kind === "studio") studio = venture;
+    if (existsSync(join(anchor, "harness.json"))) {
+      findings.push({ level: "info", message: `${venture.relpath}: v0 venture also carries harness.json (migrating to harness/v1)` });
+    }
   };
 
   for (const [dir] of candidates) {
@@ -235,6 +250,23 @@ export function sweep(rootArg: string, opts: { write?: boolean } = {}): Registry
   const matchedTriage = new Set<string>();
   for (const [dir, relpath] of [...candidates].sort((a, b) => a[1].localeCompare(b[1]))) {
     if (manifested.has(dir)) continue;
+    // A harness/v1 migrant (harness.json, no lingot.json) is a v1 venture, not a stray.
+    const harnessPath = join(dir, "harness.json");
+    if (existsSync(harnessPath)) {
+      const load = loadHarnessManifest(harnessPath);
+      if (load.manifest) {
+        harnessVentures.push({
+          name: load.manifest.identity.name,
+          kind: load.manifest.identity.kind,
+          owners: load.manifest.identity.owners,
+          relpath,
+          manifestPath: harnessPath,
+        });
+      } else {
+        for (const e of load.errors) findings.push({ level: "red", message: `${harnessPath}: ${e}` });
+      }
+      continue;
+    }
     const worktree = detectWorktree(dir);
     const entry = triageByPath.get(relpath);
     if (entry) matchedTriage.add(relpath);
@@ -259,6 +291,7 @@ export function sweep(rootArg: string, opts: { write?: boolean } = {}): Registry
     root,
     tool: "lingot registry --sweep (v0, P1)",
     ventures: [...ventures].sort((a, b) => a.name.localeCompare(b.name)),
+    harnessVentures: [...harnessVentures].sort((a, b) => a.name.localeCompare(b.name)),
     strays,
     findings,
     verdict: findings.some((f) => f.level === "red") ? "red" : "green",
@@ -283,6 +316,13 @@ export function formatSweepReport(registry: Registry): string {
       `  ${v.name.padEnd(20)} ${v.kind.padEnd(8)} owners: ${v.owners.join("+").padEnd(12)} ` +
         `${v.placement === "parked" ? "PARKED -> " : ""}${v.relpath}${db ? `  db: ${db}` : ""}`,
     );
+  }
+  if (registry.harnessVentures.length > 0) {
+    lines.push("");
+    lines.push(`HARNESS/V1 (${registry.harnessVentures.length})`);
+    for (const v of registry.harnessVentures) {
+      lines.push(`  ${v.name.padEnd(20)} ${v.kind.padEnd(8)} owners: ${v.owners.join("+").padEnd(12)} ${v.relpath}`);
+    }
   }
   lines.push("");
   lines.push(`STRAYS (${registry.strays.length})`);
