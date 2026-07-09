@@ -26,7 +26,7 @@ function loadDotEnv(): void {
 }
 loadDotEnv();
 import { adopt } from "./harness-adopt";
-import { tierEnv, formatTierEnv, measuredClaudeRun } from "./harness-dispatch";
+import { tierEnv, formatTierEnv, measuredClaudeRun, leanRun } from "./harness-dispatch";
 import { formatVerdict } from "./harness-verdict";
 import { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
 import { resolveLock, formatLock } from "./harness-lock";
@@ -56,8 +56,9 @@ function usage(): never {
       "  harness doctor <dir|manifest>",
       "  harness lock <dir|manifest>",
       "  harness gate-pass <dir|manifest> <suite> [--by <who>]",
-      "  harness run --tier <alias> [\"<prompt>\"] [--dry] [-- <cmd...>]",
-      "  harness batch --tier <alias> --file <tasks.txt> [--out <dir>]",
+      "  harness run --tier <alias> [\"<prompt>\"] [--dry] [-- <cmd...>]   (full Claude Code on the tier)",
+      "  harness ask --tier <alias> \"<prompt>\"                          (lean: direct model call, no agent context)",
+      "  harness batch --tier <alias> --file <tasks.txt> [--out <dir>]   (lean fan-out)",
       "  harness usage",
     ].join("\n"),
   );
@@ -220,12 +221,11 @@ if (command === "boot" || command === "adopt") {
     process.exit(1);
   }
   const t = KERNEL_TIER_REGISTRY[alias];
-  const env = { ...process.env, ...resolved.env };
   if (outDir) mkdirSync(outDir, { recursive: true });
-  console.error(`harness batch: ${tasks.length} task(s) on tier ${alias}${outDir ? ` -> ${outDir}/` : ""}`);
+  console.error(`harness batch: ${tasks.length} task(s) on tier ${alias} (lean)${outDir ? ` -> ${outDir}/` : ""}`);
   let totIn = 0, totOut = 0, totCost = 0, fails = 0;
   for (let i = 0; i < tasks.length; i++) {
-    const m = measuredClaudeRun(tasks[i], env, t?.price);
+    const m = await leanRun(tasks[i], resolved.env ?? {}, t?.price);
     totIn += m.inTokens;
     totOut += m.outTokens;
     totCost += m.costUsd;
@@ -247,6 +247,42 @@ if (command === "boot" || command === "adopt") {
   }
   console.error(`done: ${tasks.length - fails}/${tasks.length} ok, ${totIn} in / ${totOut} out tokens, est. $${totCost.toFixed(4)} total`);
   process.exit(fails ? 1 : 0);
+} else if (command === "ask") {
+  const tierIdx = args.indexOf("--tier");
+  const alias = tierIdx !== -1 ? args[tierIdx + 1] : undefined;
+  if (!alias) usage();
+  const resolved = tierEnv(alias);
+  if (resolved.missing && resolved.missing.length > 0) {
+    console.error(formatTierEnv(resolved));
+    process.exit(1);
+  }
+  const promptArgs: string[] = [];
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === "--tier") { i++; continue; }
+    if (args[i].startsWith("--")) continue;
+    promptArgs.push(args[i]);
+  }
+  const prompt = promptArgs.join(" ").trim();
+  if (!prompt) {
+    console.error('usage: harness ask --tier <alias> "<prompt>"');
+    process.exit(2);
+  }
+  const t = KERNEL_TIER_REGISTRY[alias];
+  const m = await leanRun(prompt, resolved.env ?? {}, t?.price);
+  process.stdout.write(m.text.endsWith("\n") ? m.text : m.text + "\n");
+  recordDispatch(process.cwd(), {
+    at: new Date().toISOString(),
+    tier: alias,
+    provider: t?.provider ?? "?",
+    model: t?.model ?? "?",
+    role: (t?.role ?? "labor") as "judgment" | "labor",
+    exit: m.exit,
+    inTokens: m.inTokens,
+    outTokens: m.outTokens,
+    costUsd: m.costUsd,
+  });
+  console.error(`  [${alias} lean] ${m.inTokens} in / ${m.outTokens} out tokens, est. $${m.costUsd.toFixed(5)}`);
+  process.exit(m.exit);
 } else if (command === "usage") {
   console.log(formatUsage(summarizeUsage(readUsage(process.cwd()))));
   process.exit(0);

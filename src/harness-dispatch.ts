@@ -16,6 +16,44 @@ export interface MeasuredRun {
  * batch` (fan-out). Never returns a token value; returns the result text +
  * token counts + estimated cost.
  */
+/**
+ * LEAN dispatch: a direct Anthropic-format `/v1/messages` call to the tier, with
+ * just the prompt -- NO Claude Code agent scaffold (no tools, no repo context).
+ * For pure text labor (summarize/classify/transform), this is ~prompt-sized
+ * context instead of the ~59k the agent wrap carries, so cheap labor is actually
+ * cheap. Requires a resolved external endpoint + model (bulk/beast/grok); the
+ * Anthropic tiers have no model id here, so use `run` (in-session) for those.
+ */
+export async function leanRun(
+  prompt: string,
+  resolvedEnv: Readonly<Record<string, string>> = {},
+  price?: { in: number; out: number },
+): Promise<MeasuredRun> {
+  const model = resolvedEnv.ANTHROPIC_MODEL;
+  const baseUrl = resolvedEnv.ANTHROPIC_BASE_URL;
+  const token = resolvedEnv.ANTHROPIC_AUTH_TOKEN;
+  if (!model || !baseUrl || !token) {
+    return {
+      text: "lean/ask needs a resolved external endpoint + model (bulk/beast/grok); use `harness run` for the Anthropic tiers.",
+      inTokens: 0, outTokens: 0, costUsd: 0, exit: 2,
+    };
+  }
+  try {
+    const r = await fetch(`${baseUrl.replace(/\/+$/, "")}/v1/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model, max_tokens: 4096, messages: [{ role: "user", content: prompt }] }),
+    });
+    const j: any = await r.json().catch(() => ({}));
+    const text = j?.content?.[0]?.text ?? (j?.error?.message ? `ERR: ${j.error.message}` : "");
+    const inTokens = (j?.usage?.input_tokens ?? 0) + (j?.usage?.cache_read_input_tokens ?? 0) + (j?.usage?.cache_creation_input_tokens ?? 0);
+    const outTokens = j?.usage?.output_tokens ?? 0;
+    return { text, inTokens, outTokens, costUsd: estimateCostUsd(inTokens, outTokens, price), exit: r.ok ? 0 : 1 };
+  } catch (e: any) {
+    return { text: `ERR: ${e?.message ?? e}`, inTokens: 0, outTokens: 0, costUsd: 0, exit: 1 };
+  }
+}
+
 export function measuredClaudeRun(prompt: string, env: NodeJS.ProcessEnv, price?: { in: number; out: number }): MeasuredRun {
   const r = spawnSync("claude", ["-p", "--output-format", "json", prompt], { encoding: "utf8", env });
   let inTokens = 0, outTokens = 0, text = r.stdout ?? "";
