@@ -31,6 +31,8 @@ import { formatVerdict } from "./harness-verdict";
 import { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
 import { resolveLock, formatLock } from "./harness-lock";
 import { recordGatePass } from "./harness-gates";
+import { recordDispatch, readUsage, summarizeUsage, formatUsage } from "./harness-usage";
+import { KERNEL_TIER_REGISTRY } from "./harness-kernel";
 
 /**
  * The harness CLI (Phase 0, 0.3c) -- the terminal operator surface
@@ -55,6 +57,7 @@ function usage(): never {
       "  harness lock <dir|manifest>",
       "  harness gate-pass <dir|manifest> <suite> [--by <who>]",
       "  harness run --tier <alias> [-- <cmd...>]",
+      "  harness usage",
     ].join("\n"),
   );
   process.exit(2);
@@ -161,7 +164,19 @@ if (command === "boot" || command === "adopt") {
     process.exit(0);
   }
   const res = spawnSync(cmd[0], cmd.slice(1), { stdio: "inherit", env: { ...process.env, ...resolved.env } });
+  const t = KERNEL_TIER_REGISTRY[alias!];
+  recordDispatch(process.cwd(), {
+    at: new Date().toISOString(),
+    tier: alias!,
+    provider: t?.provider ?? "?",
+    model: t?.model ?? "?",
+    role: t?.role ?? "labor",
+    exit: res.status ?? 1,
+  });
   process.exit(res.status ?? 1);
+} else if (command === "usage") {
+  console.log(formatUsage(summarizeUsage(readUsage(process.cwd()))));
+  process.exit(0);
 } else {
   usage();
 }

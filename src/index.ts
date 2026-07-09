@@ -40,3 +40,5 @@ export { readGateLedger, recordGatePass, unmetPromoteGates } from "./harness-gat
 export type { GateRecord, GateLedger } from "./harness-gates";
 export { tierEnv, formatTierEnv } from "./harness-dispatch";
 export type { TierEnvResult } from "./harness-dispatch";
+export { recordDispatch, readUsage, summarizeUsage, formatUsage } from "./harness-usage";
+export type { DispatchRecord, UsageSummary } from "./harness-usage";
