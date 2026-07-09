@@ -31,6 +31,7 @@ import { formatVerdict } from "./harness-verdict";
 import { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
 import { resolveLock, formatLock } from "./harness-lock";
 import { recordGatePass } from "./harness-gates";
+import { runEval, formatEvalReport } from "./harness-eval";
 import { recordDispatch, readUsage, summarizeUsage, formatUsage } from "./harness-usage";
 import { KERNEL_TIER_REGISTRY } from "./harness-kernel";
 
@@ -56,6 +57,7 @@ function usage(): never {
       "  harness doctor <dir|manifest>",
       "  harness lock <dir|manifest>",
       "  harness gate-pass <dir|manifest> <suite> [--by <who>]",
+      "  harness eval <dir|manifest> <suite> [--tier <default>]",
       "  harness run --tier <alias> [\"<prompt>\"] [--dry] [-- <cmd...>]   (full Claude Code on the tier)",
       "  harness ask --tier <alias> \"<prompt>\"                          (lean: direct model call, no agent context)",
       "  harness batch --tier <alias> --file <tasks.txt> [--out <dir>]   (lean fan-out)",
@@ -286,6 +288,23 @@ if (command === "boot" || command === "adopt") {
 } else if (command === "usage") {
   console.log(formatUsage(summarizeUsage(readUsage(process.cwd()))));
   process.exit(0);
+} else if (command === "eval") {
+  const target = positional[0];
+  const suite = positional[1];
+  if (!target || !suite) {
+    console.error("usage: harness eval <dir|manifest> <suite> [--tier <default>]");
+    process.exit(2);
+  }
+  const manifestPath = resolveManifestPath(target);
+  if (!manifestPath) {
+    console.error(`no harness/v1 manifest found at ${target}`);
+    process.exit(1);
+  }
+  const tierIdx = args.indexOf("--tier");
+  const defaultTier = tierIdx !== -1 ? args[tierIdx + 1] : "bulk";
+  const report = await runEval(dirname(manifestPath), suite, defaultTier);
+  console.log(formatEvalReport(report));
+  process.exit(report.total > 0 && report.passed === report.total ? 0 : 1);
 } else {
   usage();
 }

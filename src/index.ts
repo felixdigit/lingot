@@ -38,6 +38,8 @@ export { resolveSecret, makeSecretResolver, envSource, keychainSource } from "./
 export type { SecretSource } from "./harness-secrets";
 export { readGateLedger, recordGatePass, unmetPromoteGates } from "./harness-gates";
 export type { GateRecord, GateLedger } from "./harness-gates";
+export { runEval, formatEvalReport, matchesExpect } from "./harness-eval";
+export type { EvalCase, EvalCaseResult, EvalReport } from "./harness-eval";
 export { tierEnv, formatTierEnv, measuredClaudeRun, leanRun } from "./harness-dispatch";
 export type { TierEnvResult, MeasuredRun } from "./harness-dispatch";
 export { recordDispatch, readUsage, summarizeUsage, formatUsage, estimateCostUsd } from "./harness-usage";
