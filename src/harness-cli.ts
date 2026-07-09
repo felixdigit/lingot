@@ -31,7 +31,7 @@ import { formatVerdict } from "./harness-verdict";
 import { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
 import { resolveLock, formatLock } from "./harness-lock";
 import { recordGatePass } from "./harness-gates";
-import { recordDispatch, readUsage, summarizeUsage, formatUsage } from "./harness-usage";
+import { recordDispatch, readUsage, summarizeUsage, formatUsage, estimateCostUsd } from "./harness-usage";
 import { KERNEL_TIER_REGISTRY } from "./harness-kernel";
 
 /**
@@ -181,16 +181,30 @@ if (command === "boot" || command === "adopt") {
     console.log(formatTierEnv(resolved));
     process.exit(0);
   }
-  const res = spawnSync(cmd[0], cmd.slice(1), { stdio: "inherit", env: { ...process.env, ...resolved.env } });
   const t = KERNEL_TIER_REGISTRY[alias!];
-  recordDispatch(process.cwd(), {
-    at: new Date().toISOString(),
-    tier: alias!,
-    provider: t?.provider ?? "?",
-    model: t?.model ?? "?",
-    role: t?.role ?? "labor",
-    exit: res.status ?? 1,
-  });
+  const env = { ...process.env, ...resolved.env };
+  const base = { at: new Date().toISOString(), tier: alias!, provider: t?.provider ?? "?", model: t?.model ?? "?", role: (t?.role ?? "labor") as "judgment" | "labor" };
+
+  // Measured path: the ergonomic `claude -p <prompt>` run -- capture usage + cost.
+  if (sep === -1 && cmd[0] === "claude" && cmd[1] === "-p") {
+    const r = spawnSync("claude", ["-p", "--output-format", "json", ...cmd.slice(2)], { encoding: "utf8", env });
+    let inTok = 0, outTok = 0, text = r.stdout ?? "";
+    try {
+      const j = JSON.parse(r.stdout ?? "{}");
+      text = j.result ?? text;
+      inTok = (j.usage?.input_tokens ?? 0) + (j.usage?.cache_read_input_tokens ?? 0) + (j.usage?.cache_creation_input_tokens ?? 0);
+      outTok = j.usage?.output_tokens ?? 0;
+    } catch { /* not json -- print raw */ }
+    process.stdout.write(text.endsWith("\n") ? text : text + "\n");
+    const costUsd = estimateCostUsd(inTok, outTok, t?.price);
+    recordDispatch(process.cwd(), { ...base, exit: r.status ?? 0, inTokens: inTok, outTokens: outTok, costUsd });
+    console.error(`  [${alias}] ${inTok} in / ${outTok} out tokens, est. $${costUsd.toFixed(5)}`);
+    process.exit(r.status ?? 0);
+  }
+
+  // Streaming / arbitrary-command path: inherit stdio, no measurement.
+  const res = spawnSync(cmd[0], cmd.slice(1), { stdio: "inherit", env });
+  recordDispatch(process.cwd(), { ...base, exit: res.status ?? 1 });
   process.exit(res.status ?? 1);
 } else if (command === "usage") {
   console.log(formatUsage(summarizeUsage(readUsage(process.cwd()))));

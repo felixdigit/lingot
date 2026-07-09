@@ -3,7 +3,7 @@ import { deepMerge, enforceManagedBand, resolveProject } from "./harness-merge";
 import { isHarnessManifest } from "./harness-manifest";
 import { tierEnv, formatTierEnv } from "./harness-dispatch";
 import type { TierEntry } from "./harness-kernel";
-import { summarizeUsage } from "./harness-usage";
+import { summarizeUsage, estimateCostUsd } from "./harness-usage";
 
 describe("deepMerge (kernel (+) overlay)", () => {
   it("scalars override, arrays concat + dedup, objects deep-merge; overlay wins", () => {
@@ -66,15 +66,22 @@ describe("tierEnv (the launch shim) -- and it never leaks a token value", () => 
   });
 });
 
-describe("summarizeUsage", () => {
-  it("counts per tier and splits labor vs judgment", () => {
+describe("cost", () => {
+  it("estimateCostUsd = in/1e6*inPrice + out/1e6*outPrice; 0 without a price", () => {
+    expect(estimateCostUsd(1_000_000, 1_000_000, { in: 3, out: 15 })).toBeCloseTo(18, 6);
+    expect(estimateCostUsd(500_000, 0, { in: 0.6, out: 2.2 })).toBeCloseTo(0.3, 6);
+    expect(estimateCostUsd(1000, 1000, undefined)).toBe(0);
+  });
+  it("summarizeUsage totals cost per tier + overall, and splits labor vs judgment", () => {
     const s = summarizeUsage([
-      { at: "", tier: "bulk", provider: "zai", model: "glm", role: "labor", exit: 0 },
-      { at: "", tier: "bulk", provider: "zai", model: "glm", role: "labor", exit: 0 },
-      { at: "", tier: "reason", provider: "anthropic", model: "opus", role: "judgment", exit: 0 },
+      { at: "", tier: "bulk", provider: "zai", model: "glm", role: "labor", exit: 0, costUsd: 0.01 },
+      { at: "", tier: "bulk", provider: "zai", model: "glm", role: "labor", exit: 0, costUsd: 0.02 },
+      { at: "", tier: "reason", provider: "anthropic", model: "opus", role: "judgment", exit: 0, costUsd: 0.5 },
     ]);
     expect(s.total).toBe(3);
     expect(s.byTier).toEqual({ bulk: 2, reason: 1 });
     expect(s.byRole).toEqual({ judgment: 1, labor: 2 });
+    expect(s.totalCostUsd).toBeCloseTo(0.53, 6);
+    expect(s.costByTier).toEqual({ bulk: 0.03, reason: 0.5 });
   });
 });

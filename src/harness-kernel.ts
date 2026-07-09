@@ -30,22 +30,25 @@ export interface TierEntry {
   readonly baseUrl?: string;
   /** Reach via the self-hosted LiteLLM gateway (OpenAI-only providers: Grok, vLLM). */
   readonly gateway?: boolean;
+  /** APPROXIMATE price, USD per million tokens (in/out), for cost estimation. Edit as provider pricing moves. */
+  readonly price?: { readonly in: number; readonly out: number };
 }
 
 export const KERNEL_TIER_REGISTRY: Readonly<Record<string, TierEntry>> = {
   // Anthropic native -- session default creds (no base-URL override; in-session via the Agent tool).
-  reason: { provider: "anthropic", model: "opus-4.8 / fable", transport: "native", role: "judgment" },
-  scoped: { provider: "anthropic", model: "sonnet", transport: "native", role: "judgment" },
-  mechanical: { provider: "anthropic", model: "haiku", transport: "native", role: "labor" },
+  reason: { provider: "anthropic", model: "opus-4.8 / fable", transport: "native", role: "judgment", price: { in: 15, out: 75 } },
+  scoped: { provider: "anthropic", model: "sonnet", transport: "native", role: "judgment", price: { in: 3, out: 15 } },
+  mechanical: { provider: "anthropic", model: "haiku", transport: "native", role: "labor", price: { in: 0.8, out: 4 } },
   // Z.ai GLM -- native Anthropic-compatible endpoint, own token (no gateway).
   bulk: {
     provider: "zai", model: "glm-5.2", transport: "native", role: "labor",
-    tokenEnv: "ZAI_API_KEY", baseUrl: "https://api.z.ai/api/anthropic",
+    tokenEnv: "ZAI_API_KEY", baseUrl: "https://api.z.ai/api/anthropic", price: { in: 0.6, out: 2.2 },
   },
   // xAI Grok + RunPod vLLM -- OpenAI-only, reached through the LiteLLM gateway.
-  "fast-cheap": { provider: "xai", model: "grok-4.1-fast", transport: "gateway", role: "labor", gateway: true },
-  "frontier-alt": { provider: "xai", model: "grok-4.5", transport: "gateway", role: "judgment", gateway: true },
-  beast: { provider: "runpod", model: "qwen2.5-7b-instruct", transport: "gateway", role: "labor", gateway: true },
+  "fast-cheap": { provider: "xai", model: "grok-4.1-fast", transport: "gateway", role: "labor", gateway: true, price: { in: 0.5, out: 1.5 } },
+  "frontier-alt": { provider: "xai", model: "grok-4.5", transport: "gateway", role: "judgment", gateway: true, price: { in: 3, out: 15 } },
+  // beast is GPU-time-billed (RunPod per-second), not per-token -- price 0; GPU cost tracked separately.
+  beast: { provider: "runpod", model: "qwen2.5-7b-instruct", transport: "gateway", role: "labor", gateway: true, price: { in: 0, out: 0 } },
 };
 
 export const KERNEL_DEFAULTS: Partial<HarnessManifest> = {

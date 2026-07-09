@@ -17,6 +17,16 @@ export interface DispatchRecord {
   readonly model: string;
   readonly role: "judgment" | "labor";
   readonly exit: number;
+  /** Token usage + estimated cost, when the dispatch was a measured claude run. */
+  readonly inTokens?: number;
+  readonly outTokens?: number;
+  readonly costUsd?: number;
+}
+
+/** Estimated cost in USD from token counts + the tier's per-million price. */
+export function estimateCostUsd(inTokens: number, outTokens: number, price?: { in: number; out: number }): number {
+  if (!price) return 0;
+  return (inTokens / 1e6) * price.in + (outTokens / 1e6) * price.out;
 }
 
 const ledgerPath = (root: string): string => join(root, ".harness", "usage.jsonl");
@@ -47,24 +57,33 @@ export interface UsageSummary {
   readonly total: number;
   readonly byTier: Readonly<Record<string, number>>;
   readonly byRole: { judgment: number; labor: number };
+  readonly totalCostUsd: number;
+  readonly costByTier: Readonly<Record<string, number>>;
 }
 
 export function summarizeUsage(records: readonly DispatchRecord[]): UsageSummary {
   const byTier: Record<string, number> = {};
+  const costByTier: Record<string, number> = {};
   const byRole = { judgment: 0, labor: 0 };
+  let totalCostUsd = 0;
   for (const r of records) {
     byTier[r.tier] = (byTier[r.tier] ?? 0) + 1;
+    const c = r.costUsd ?? 0;
+    costByTier[r.tier] = (costByTier[r.tier] ?? 0) + c;
+    totalCostUsd += c;
     if (r.role === "judgment") byRole.judgment += 1;
     else byRole.labor += 1;
   }
-  return { total: records.length, byTier, byRole };
+  return { total: records.length, byTier, byRole, totalCostUsd, costByTier };
 }
+
+const usd = (n: number): string => "$" + n.toFixed(n > 0 && n < 0.01 ? 5 : 4);
 
 export function formatUsage(s: UsageSummary): string {
   if (s.total === 0) return "harness usage: no dispatches recorded yet";
-  const lines = [`harness usage: ${s.total} dispatch(es)`];
+  const lines = [`harness usage: ${s.total} dispatch(es), est. ${usd(s.totalCostUsd)} total`];
   for (const [tier, n] of Object.entries(s.byTier).sort((a, b) => b[1] - a[1])) {
-    lines.push(`  ${String(n).padStart(4)}  ${tier}`);
+    lines.push(`  ${String(n).padStart(4)}  ${tier.padEnd(12)} est. ${usd(s.costByTier[tier] ?? 0)}`);
   }
   const pctLabor = Math.round((s.byRole.labor / s.total) * 100);
   lines.push(`  -- ${pctLabor}% labor / ${100 - pctLabor}% judgment (route labor down, keep judgment premium)`);
