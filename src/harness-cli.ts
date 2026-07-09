@@ -1,4 +1,4 @@
-import { existsSync, statSync, writeFileSync, readFileSync } from "node:fs";
+import { existsSync, statSync, writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -26,12 +26,12 @@ function loadDotEnv(): void {
 }
 loadDotEnv();
 import { adopt } from "./harness-adopt";
-import { tierEnv, formatTierEnv } from "./harness-dispatch";
+import { tierEnv, formatTierEnv, measuredClaudeRun } from "./harness-dispatch";
 import { formatVerdict } from "./harness-verdict";
 import { doctorProject, formatHarnessDoctorReport } from "./harness-doctor";
 import { resolveLock, formatLock } from "./harness-lock";
 import { recordGatePass } from "./harness-gates";
-import { recordDispatch, readUsage, summarizeUsage, formatUsage, estimateCostUsd } from "./harness-usage";
+import { recordDispatch, readUsage, summarizeUsage, formatUsage } from "./harness-usage";
 import { KERNEL_TIER_REGISTRY } from "./harness-kernel";
 
 /**
@@ -57,6 +57,7 @@ function usage(): never {
       "  harness lock <dir|manifest>",
       "  harness gate-pass <dir|manifest> <suite> [--by <who>]",
       "  harness run --tier <alias> [\"<prompt>\"] [--dry] [-- <cmd...>]",
+      "  harness batch --tier <alias> --file <tasks.txt> [--out <dir>]",
       "  harness usage",
     ].join("\n"),
   );
@@ -187,25 +188,65 @@ if (command === "boot" || command === "adopt") {
 
   // Measured path: the ergonomic `claude -p <prompt>` run -- capture usage + cost.
   if (sep === -1 && cmd[0] === "claude" && cmd[1] === "-p") {
-    const r = spawnSync("claude", ["-p", "--output-format", "json", ...cmd.slice(2)], { encoding: "utf8", env });
-    let inTok = 0, outTok = 0, text = r.stdout ?? "";
-    try {
-      const j = JSON.parse(r.stdout ?? "{}");
-      text = j.result ?? text;
-      inTok = (j.usage?.input_tokens ?? 0) + (j.usage?.cache_read_input_tokens ?? 0) + (j.usage?.cache_creation_input_tokens ?? 0);
-      outTok = j.usage?.output_tokens ?? 0;
-    } catch { /* not json -- print raw */ }
-    process.stdout.write(text.endsWith("\n") ? text : text + "\n");
-    const costUsd = estimateCostUsd(inTok, outTok, t?.price);
-    recordDispatch(process.cwd(), { ...base, exit: r.status ?? 0, inTokens: inTok, outTokens: outTok, costUsd });
-    console.error(`  [${alias}] ${inTok} in / ${outTok} out tokens, est. $${costUsd.toFixed(5)}`);
-    process.exit(r.status ?? 0);
+    const m = measuredClaudeRun(cmd.slice(2).join(" "), env, t?.price);
+    process.stdout.write(m.text.endsWith("\n") ? m.text : m.text + "\n");
+    recordDispatch(process.cwd(), { ...base, exit: m.exit, inTokens: m.inTokens, outTokens: m.outTokens, costUsd: m.costUsd });
+    console.error(`  [${alias}] ${m.inTokens} in / ${m.outTokens} out tokens, est. $${m.costUsd.toFixed(5)}`);
+    process.exit(m.exit);
   }
 
   // Streaming / arbitrary-command path: inherit stdio, no measurement.
   const res = spawnSync(cmd[0], cmd.slice(1), { stdio: "inherit", env });
   recordDispatch(process.cwd(), { ...base, exit: res.status ?? 1 });
   process.exit(res.status ?? 1);
+} else if (command === "batch") {
+  const tierIdx = args.indexOf("--tier");
+  const alias = tierIdx !== -1 ? args[tierIdx + 1] : undefined;
+  const fileIdx = args.indexOf("--file");
+  const file = fileIdx !== -1 ? args[fileIdx + 1] : undefined;
+  if (!alias || !file) usage();
+  const resolved = tierEnv(alias);
+  if (resolved.missing && resolved.missing.length > 0) {
+    console.error(formatTierEnv(resolved));
+    process.exit(1);
+  }
+  const outIdx = args.indexOf("--out");
+  const outDir = outIdx !== -1 ? args[outIdx + 1] : undefined;
+  let tasks: string[];
+  try {
+    tasks = readFileSync(file, "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  } catch (e) {
+    console.error(`cannot read ${file}: ${(e as Error).message}`);
+    process.exit(1);
+  }
+  const t = KERNEL_TIER_REGISTRY[alias];
+  const env = { ...process.env, ...resolved.env };
+  if (outDir) mkdirSync(outDir, { recursive: true });
+  console.error(`harness batch: ${tasks.length} task(s) on tier ${alias}${outDir ? ` -> ${outDir}/` : ""}`);
+  let totIn = 0, totOut = 0, totCost = 0, fails = 0;
+  for (let i = 0; i < tasks.length; i++) {
+    const m = measuredClaudeRun(tasks[i], env, t?.price);
+    totIn += m.inTokens;
+    totOut += m.outTokens;
+    totCost += m.costUsd;
+    if (m.exit !== 0) fails += 1;
+    recordDispatch(process.cwd(), {
+      at: new Date().toISOString(),
+      tier: alias,
+      provider: t?.provider ?? "?",
+      model: t?.model ?? "?",
+      role: (t?.role ?? "labor") as "judgment" | "labor",
+      exit: m.exit,
+      inTokens: m.inTokens,
+      outTokens: m.outTokens,
+      costUsd: m.costUsd,
+    });
+    if (outDir) writeFileSync(join(outDir, `${i + 1}.txt`), m.text.endsWith("\n") ? m.text : m.text + "\n");
+    const preview = outDir ? "" : " -> " + m.text.replace(/\s+/g, " ").trim().slice(0, 80);
+    console.error(`  [${i + 1}/${tasks.length}] ${m.inTokens}+${m.outTokens} tok, $${m.costUsd.toFixed(5)}${m.exit ? " FAIL" : ""}${preview}`);
+  }
+  console.error(`done: ${tasks.length - fails}/${tasks.length} ok, ${totIn} in / ${totOut} out tokens, est. $${totCost.toFixed(4)} total`);
+  process.exit(fails ? 1 : 0);
 } else if (command === "usage") {
   console.log(formatUsage(summarizeUsage(readUsage(process.cwd()))));
   process.exit(0);
