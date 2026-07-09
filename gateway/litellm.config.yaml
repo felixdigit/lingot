@@ -15,27 +15,25 @@
 # routes correctly.
 
 model_list:
-  # xAI Grok -- the `fast-cheap` tier. Ready the moment XAI_API_KEY is set.
-  - model_name: grok-4.1-fast
+  # RunPod vLLM -- the `beast` burst tier. Wired 2026-07-08 (endpoint
+  # lzws1j1mexupbr, model qwen/qwen2.5-7b-instruct). model_name matches the tier
+  # registry's beast.model so the shim's ANTHROPIC_MODEL routes here.
+  - model_name: qwen2.5-7b-instruct
     litellm_params:
-      model: xai/grok-4.1-fast
-      api_key: os.environ/XAI_API_KEY
+      model: openai/qwen/qwen2.5-7b-instruct
+      api_base: os.environ/RUNPOD_VLLM_ENDPOINT
+      api_key: os.environ/RUNPOD_API_KEY
 
-  # xAI Grok -- the `frontier-alt` tier (newest).
-  - model_name: grok-4.5
-    litellm_params:
-      model: xai/grok-4.5
-      api_key: os.environ/XAI_API_KEY
-
-  # RunPod vLLM -- the `beast` burst tier. Finalize once the serverless endpoint
-  # exists: set the model_name to match the registry, api_base to the endpoint's
-  # OpenAI URL (e.g. https://api.runpod.ai/v2/<endpoint-id>/openai/v1), and pick
-  # the open-weight model id you deployed. Left commented until provisioned.
-  # - model_name: beast-vllm
+  # xAI Grok -- PARKED (Felix, 2026-07-08: skip Grok for now). Uncomment + set
+  # XAI_API_KEY to enable the `fast-cheap` / `frontier-alt` tiers.
+  # - model_name: grok-4.1-fast
   #   litellm_params:
-  #     model: openai/<deployed-model-id>
-  #     api_base: os.environ/RUNPOD_VLLM_ENDPOINT
-  #     api_key: os.environ/RUNPOD_API_KEY
+  #     model: xai/grok-4.1-fast
+  #     api_key: os.environ/XAI_API_KEY
+  # - model_name: grok-4.5
+  #   litellm_params:
+  #     model: xai/grok-4.5
+  #     api_key: os.environ/XAI_API_KEY
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

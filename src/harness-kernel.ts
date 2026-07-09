@@ -45,7 +45,7 @@ export const KERNEL_TIER_REGISTRY: Readonly<Record<string, TierEntry>> = {
   // xAI Grok + RunPod vLLM -- OpenAI-only, reached through the LiteLLM gateway.
   "fast-cheap": { provider: "xai", model: "grok-4.1-fast", transport: "gateway", role: "labor", gateway: true },
   "frontier-alt": { provider: "xai", model: "grok-4.5", transport: "gateway", role: "judgment", gateway: true },
-  beast: { provider: "runpod", model: "open-weight (vllm)", transport: "gateway", role: "labor", gateway: true },
+  beast: { provider: "runpod", model: "qwen2.5-7b-instruct", transport: "gateway", role: "labor", gateway: true },
 };
 
 export const KERNEL_DEFAULTS: Partial<HarnessManifest> = {
