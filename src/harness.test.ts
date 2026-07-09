@@ -1,0 +1,80 @@
+import { describe, it, expect } from "vitest";
+import { deepMerge, enforceManagedBand, resolveProject } from "./harness-merge";
+import { isHarnessManifest } from "./harness-manifest";
+import { tierEnv, formatTierEnv } from "./harness-dispatch";
+import type { TierEntry } from "./harness-kernel";
+import { summarizeUsage } from "./harness-usage";
+
+describe("deepMerge (kernel (+) overlay)", () => {
+  it("scalars override, arrays concat + dedup, objects deep-merge; overlay wins", () => {
+    const base = { a: 1, list: ["x", "y"], obj: { keep: 1, drop: 1 } };
+    const overlay = { a: 2, list: ["y", "z"], obj: { drop: 2 } };
+    expect(deepMerge(base, overlay)).toEqual({ a: 2, list: ["x", "y", "z"], obj: { keep: 1, drop: 2 } });
+  });
+  it("undefined overlay leaves the base value in place", () => {
+    expect(deepMerge({ a: 1 }, { a: undefined })).toEqual({ a: 1 });
+  });
+});
+
+describe("the non-overridable managed band", () => {
+  it("rejects an overlay that sets a managed key", () => {
+    const errs = enforceManagedBand({ observability: { spans: "custom" } });
+    expect(errs.length).toBe(1);
+    expect(errs[0]).toContain("observability.spans");
+  });
+  it("allows an overlay that touches nothing managed", () => {
+    expect(enforceManagedBand({ routing: { tiers: ["scoped"] } })).toEqual([]);
+  });
+  it("resolveProject blocks a managed override, merges an ok overlay", () => {
+    const manifest: any = { harness: "harness/v1", identity: { name: "x", kind: "venture", owners: ["felix"] }, kernel: { version: "~>1" } };
+    expect(resolveProject({ observability: { spans: "otel-genai" } }, { ...manifest, observability: { spans: "no" } }).resolved).toBeUndefined();
+    expect(resolveProject({ loop: { anchor: "claude-agent-sdk" } }, manifest).resolved).toBeDefined();
+  });
+});
+
+describe("isHarnessManifest", () => {
+  it("discriminates harness/v1 from v0 / blocks", () => {
+    expect(isHarnessManifest({ harness: "harness/v1", identity: {} })).toBe(true);
+    expect(isHarnessManifest({ manifest: "lingot/v0", identity: {} })).toBe(false);
+    expect(isHarnessManifest({ name: "block", domain: "x" })).toBe(false);
+  });
+});
+
+describe("tierEnv (the launch shim) -- and it never leaks a token value", () => {
+  const reg: Record<string, TierEntry> = {
+    reason: { provider: "anthropic", model: "opus", transport: "native", role: "judgment" },
+    bulk: { provider: "zai", model: "glm-5.2", transport: "native", role: "labor", tokenEnv: "ZAI_API_KEY", baseUrl: "https://api.z.ai/api/anthropic" },
+    beast: { provider: "runpod", model: "qwen", transport: "gateway", role: "labor", gateway: true },
+  };
+  it("anthropic native -> no override", () => {
+    expect(tierEnv("reason", {}, reg).env).toEqual({});
+  });
+  it("z.ai with token -> base+token+model; token value redacted in the formatted view", () => {
+    const r = tierEnv("bulk", { ZAI_API_KEY: "sk-secret-value" }, reg);
+    expect(r.env?.ANTHROPIC_BASE_URL).toBe("https://api.z.ai/api/anthropic");
+    expect(r.env?.ANTHROPIC_AUTH_TOKEN).toBe("sk-secret-value");
+    expect(formatTierEnv(r)).not.toContain("sk-secret-value");
+    expect(formatTierEnv(r)).toContain("***redacted***");
+  });
+  it("z.ai without the token -> HELD, names the missing var", () => {
+    const r = tierEnv("bulk", {}, reg);
+    expect(r.missing).toEqual(["ZAI_API_KEY"]);
+  });
+  it("gateway tier without gateway env -> HELD, names both vars", () => {
+    const r = tierEnv("beast", {}, reg);
+    expect(r.missing).toEqual(["LITELLM_BASE_URL", "LITELLM_MASTER_KEY"]);
+  });
+});
+
+describe("summarizeUsage", () => {
+  it("counts per tier and splits labor vs judgment", () => {
+    const s = summarizeUsage([
+      { at: "", tier: "bulk", provider: "zai", model: "glm", role: "labor", exit: 0 },
+      { at: "", tier: "bulk", provider: "zai", model: "glm", role: "labor", exit: 0 },
+      { at: "", tier: "reason", provider: "anthropic", model: "opus", role: "judgment", exit: 0 },
+    ]);
+    expect(s.total).toBe(3);
+    expect(s.byTier).toEqual({ bulk: 2, reason: 1 });
+    expect(s.byRole).toEqual({ judgment: 1, labor: 2 });
+  });
+});
