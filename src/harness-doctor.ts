@@ -3,6 +3,7 @@ import { resolveProject } from "./harness-merge";
 import { KERNEL_DEFAULTS, KERNEL_VERSION, KERNEL_TIER_REGISTRY } from "./harness-kernel";
 import { compileTargets } from "./harness-emit";
 import { resolveSecret as machineLocalResolveSecret } from "./harness-secrets";
+import { tierEnv } from "./harness-dispatch";
 
 /**
  * The harness/v1 doctor (Phase 0, 0.4) -- the STANDING conformance verdict
@@ -70,6 +71,9 @@ export function doctorProject(manifestPath: string, opts: DoctorOptions = {}): H
   const tiers = resolved.routing?.tiers ?? [];
   const badTiers = tiers.filter((t) => !(t in KERNEL_TIER_REGISTRY));
   if (badTiers.length) findings.push({ check: "tiers", level: "red", message: `routing.tiers reference unknown alias(es): ${badTiers.join(", ")}` });
+  // tier-creds: a declared, known tier whose creds are not resolvable here (yellow -- may be intentional/unprovisioned).
+  const unrunnable = tiers.filter((t) => t in KERNEL_TIER_REGISTRY).filter((t) => (tierEnv(t).missing?.length ?? 0) > 0);
+  if (unrunnable.length) findings.push({ check: "tier-creds", level: "yellow", message: `declared tier(s) not runnable here (creds unset): ${unrunnable.join(", ")}` });
 
   // secrets: every ref resolves machine-local.
   const resolveSecret = opts.resolveSecret ?? machineLocalResolveSecret;
