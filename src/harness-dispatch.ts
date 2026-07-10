@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { KERNEL_TIER_REGISTRY, type TierEntry } from "./harness-kernel";
 import { estimateCostUsd } from "./harness-usage";
 
@@ -54,8 +56,26 @@ export async function leanRun(
   }
 }
 
-export function measuredClaudeRun(prompt: string, env: NodeJS.ProcessEnv, price?: { in: number; out: number }): MeasuredRun {
-  const r = spawnSync("claude", ["-p", "--output-format", "json", prompt], { encoding: "utf8", env });
+export function measuredClaudeRun(prompt: string, env: NodeJS.ProcessEnv, price?: { in: number; out: number }, model?: string): MeasuredRun {
+  const e: NodeJS.ProcessEnv = { ...env };
+  // Billing consistency (audit H4): unless the caller set an external tier
+  // endpoint, this runs on the Max subscription -- strip any key so it can never
+  // silently fall to credit billing.
+  if (!e.ANTHROPIC_BASE_URL) {
+    delete e.ANTHROPIC_API_KEY;
+    delete e.ANTHROPIC_AUTH_TOKEN;
+  }
+  // Enforcement consistency (audit H4): every claude spawn is gated. Fail-closed
+  // if the gate script is missing (C1 discipline); read-only allow-set unless the
+  // caller provided one.
+  const gatePath = fileURLToPath(new URL("../harness-tool-gate.sh", import.meta.url));
+  if (!existsSync(gatePath)) {
+    return { text: `ERR: tool gate missing at ${gatePath} -- refusing to run ungated (fail-closed)`, inTokens: 0, outTokens: 0, costUsd: 0, exit: 1 };
+  }
+  if (!e.HARNESS_ALLOW) e.HARNESS_ALLOW = "Read,Glob,Grep,LS,TodoWrite,NotebookRead";
+  const settings = JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: "command", command: `bash ${gatePath}` }] }] } });
+  const args = ["-p", "--output-format", "json", ...(model ? ["--model", model] : []), "--settings", settings, prompt];
+  const r = spawnSync("claude", args, { encoding: "utf8", env: e });
   let inTokens = 0, outTokens = 0, text = r.stdout ?? "";
   try {
     const j = JSON.parse(r.stdout ?? "{}");

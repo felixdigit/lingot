@@ -6,6 +6,7 @@ import { parse as parseYaml } from "yaml";
 import { sweep, type Registry, type RegistryVenture } from "./registry";
 import { dbProject, type VentureManifest } from "./venture";
 import { diffHarness } from "./harness-compile";
+import { gitHygiene, formatHygieneLine } from "./harness-hygiene";
 
 /**
  * `lingot doctor` -- mechanical conformance (HX-006, P3).
@@ -16,7 +17,7 @@ import { diffHarness } from "./harness-compile";
  * folder, never as the folder's self-check.
  */
 
-export const CONCERNS = ["AUTHORITY", "TRUTH", "LABOR", "QUALITY", "LEARNING"] as const;
+export const CONCERNS = ["AUTHORITY", "TRUTH", "LABOR", "QUALITY", "LEARNING", "HYGIENE"] as const;
 export const STUDIO_CONCERNS = ["REGISTRY", "DB-CENSUS", "REPO-CENSUS", "EXCHANGE"] as const;
 
 export interface DoctorFinding {
@@ -357,6 +358,21 @@ function checkLearning(v: RegistryVenture, out: DoctorFinding[]): void {
   }
 }
 
+/**
+ * HYGIENE (Order K): git branch/worktree accumulation, surfaced passively on
+ * every commit (per-commit doctor, not the wiring-verdict harness-doctor).
+ * INFORMATIONAL YELLOW ONLY -- never red, never blocks a commit, never
+ * affects the ratchet (findingKeys only tracks red-level findings). Silent
+ * when clean: no finding is pushed unless a threshold trips.
+ */
+function checkHygiene(v: RegistryVenture, out: DoctorFinding[]): void {
+  if (!isGitRepoRoot(v.anchor)) return;
+  const report = gitHygiene(v.anchor);
+  const line = formatHygieneLine(report);
+  if (!line) return;
+  push(out, { venture: v.name, concern: "HYGIENE", check: "branch-worktree-accumulation", level: "yellow", message: line });
+}
+
 // -------------------------------------------------------- studio plane
 
 interface DbProject {
@@ -545,6 +561,7 @@ function doctorVenture(v: RegistryVenture, studioAnchor: string | undefined, reg
     checkLabor(v, findings);
     checkQuality(v, studioAnchor, findings);
     checkLearning(v, findings);
+    checkHygiene(v, findings);
   }
   if (v.kind === "channel") checkExchange(v, findings);
   checkCompiledDrift(v, registryDir, findings);

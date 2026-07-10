@@ -183,6 +183,27 @@ export function emitAgentsMd(resolved: HarnessManifest, kernelVersion: string, a
     for (const fr of fronts) lines.push(`- **${fr.name}** -- ${fr.description}`);
   }
 
+  // Venture overlay inclusion: a hand-authored docs/operating-overlay.md is the
+  // venture's operational law the kernel spine does not carry (project pins,
+  // hazards, local conventions). Included verbatim so the compiled contract is
+  // SELF-CONTAINED -- the mechanism that let CLAUDE.md retire (H-10).
+  let overlayIncluded = false;
+  if (anchor) {
+    try {
+      const overlay = readFileSync(join(anchor, "docs", "operating-overlay.md"), "utf8").trim();
+      if (overlay) {
+        lines.push(
+          "",
+          "<!-- INCLUDED from docs/operating-overlay.md -- edit THAT file, then recompile (harness boot). -->",
+          overlay,
+        );
+        overlayIncluded = true;
+      }
+    } catch {
+      /* no overlay doc -- fine */
+    }
+  }
+
   const content = lines.join("\n") + "\n";
   return {
     target: "agents-md",
@@ -191,7 +212,10 @@ export function emitAgentsMd(resolved: HarnessManifest, kernelVersion: string, a
     hash: sha256(content),
     provenance: {
       kernel: kernelVersion,
-      from: ["kernel-contract", "identity", "governance", "routing", "evaluation.gates", "perimeter", "context.charters"],
+      from: [
+        "kernel-contract", "identity", "governance", "routing", "evaluation.gates", "perimeter", "context.charters",
+        ...(overlayIncluded ? ["docs/operating-overlay.md"] : []),
+      ],
     },
   };
 }

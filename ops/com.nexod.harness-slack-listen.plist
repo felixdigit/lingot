@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd TEMPLATE for the harness Slack Socket Mode listener (Order J).
+  Not auto-installed -- this is a standing local process, Felix loads it
+  deliberately. Copy to ~/Library/LaunchAgents/, fill in the two REPLACE_ME
+  paths, then `launchctl load`. See docs/harness/slack-listener.md.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.nexod.harness-slack-listen</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>pnpm</string>
+    <string>harness</string>
+    <string>slack</string>
+    <string>listen</string>
+  </array>
+
+  <!-- REPLACE_ME: the venture repo root the listener runs against, e.g. /Users/felix/work/nexod -->
+  <key>WorkingDirectory</key>
+  <string>REPLACE_ME_REPO_ROOT</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <!-- REPLACE_ME: absolute log paths (launchd does not expand ~). -->
+  <key>StandardOutPath</key>
+  <string>REPLACE_ME_REPO_ROOT/.harness/slack-listen.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>REPLACE_ME_REPO_ROOT/.harness/slack-listen.err.log</string>
+
+  <!--
+    SLACK_APP_TOKEN and SLACK_OPERATOR_ID must resolve via the repo's .env
+    (harness-cli.ts loads it at startup) or be set here directly. Never commit
+    real token values into this file -- see docs/harness/slack-listener.md.
+  -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>

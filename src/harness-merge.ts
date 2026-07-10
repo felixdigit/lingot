@@ -1,4 +1,5 @@
 import type { HarnessManifest } from "./harness-manifest";
+import { KERNEL_TIER_REGISTRY } from "./harness-kernel";
 
 /**
  * kernel (+) overlay deep-merge -- the core compile mechanic (Phase 0, 0.2a).
@@ -90,5 +91,20 @@ export function resolveProject(kernelDefaults: Partial<HarnessManifest>, manifes
   const bandErrors = enforceManagedBand(manifest);
   if (bandErrors.length > 0) return { errors: bandErrors };
   const resolved = deepMerge(kernelDefaults, manifest) as HarnessManifest;
+  // The judgment floor (A10, audit H3): routing.default is the judgment LANE --
+  // it must resolve to a judgment-role subscription tier. Labor/external tiers
+  // are dispatch targets, never the floor; an overlay cannot lower it.
+  const def = resolved.routing?.default;
+  if (def !== undefined) {
+    const t = KERNEL_TIER_REGISTRY[def];
+    if (!t) return { errors: [`routing.default "${def}" is not a known tier`] };
+    if (t.role !== "judgment" || t.baseUrl || t.gateway) {
+      return {
+        errors: [
+          `routing.default "${def}" violates the judgment floor (A10): the default lane must be a judgment-role subscription tier (e.g. reason/scoped); labor and external tiers are dispatch targets, never the floor`,
+        ],
+      };
+    }
+  }
   return { resolved, errors: [] };
 }

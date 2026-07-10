@@ -47,8 +47,28 @@ export const KERNEL_TIER_REGISTRY: Readonly<Record<string, TierEntry>> = {
   // xAI Grok + RunPod vLLM -- OpenAI-only, reached through the LiteLLM gateway.
   "fast-cheap": { provider: "xai", model: "grok-4.1-fast", transport: "gateway", role: "labor", gateway: true, price: { in: 0.5, out: 1.5 } },
   "frontier-alt": { provider: "xai", model: "grok-4.5", transport: "gateway", role: "judgment", gateway: true, price: { in: 3, out: 15 } },
-  // beast is GPU-time-billed (RunPod per-second), not per-token -- price 0; GPU cost tracked separately.
-  beast: { provider: "runpod", model: "qwen2.5-7b-instruct", transport: "gateway", role: "labor", gateway: true, price: { in: 0, out: 0 } },
+  // beast is NOT grunt-work. It is the deliberate BURST supercompute lane: spin up
+  // a full open-weight model on RunPod GPUs and let it reason over the entire
+  // codebase / a huge context, on-demand when Felix triggers it. GPU-time-billed
+  // (per-second), not per-token. NOT part of auto-routing -- it's a manual heavy
+  // lane. The model here is a placeholder; the real one (a large OSS reasoner) is
+  // chosen at trigger time. (Design deferred to a later stage.)
+  beast: { provider: "runpod", model: "qwen2.5-7b-instruct", transport: "gateway", role: "judgment", gateway: true, price: { in: 0, out: 0 } },
+};
+
+/**
+ * Governance gate wall (docs/harness/17 + 13): map a gated release op to the
+ * command patterns (ERE, matched against a tool's Bash command) that perform it.
+ * A held op's pattern denies the tool at the PreToolUse boundary until the founder
+ * clears it (`harness exec --clear <op>`). Kernel default; a venture may extend.
+ * The fleet never self-authorizes a release op.
+ */
+export const KERNEL_GATE_PATTERNS: Readonly<Record<string, string>> = {
+  deploy: "vercel|--prod|deploy|publish|promote|npm publish|git push",
+  spend: "purchase|checkout|payment|--pay|stripe|charge|billing",
+  "outbound-client-comms": "sendgrid|--send-email|send_message|mailx|/messages|twilio",
+  trigger: "processTrigger|createMetaCampaign|activateCampaign",
+  activation: "--activate|go-live|golive",
 };
 
 export const KERNEL_DEFAULTS: Partial<HarnessManifest> = {

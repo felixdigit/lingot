@@ -38,7 +38,7 @@ See {{overlay.product}}.
 Read, in order -- always including the founder layer (skipping it is how a session boots blind):
 
 1. `~/work/nexod/STRUCTURE.md` + `~/work/nexod/CLAUDE.md` -- studio ecosystem map + studio operating contract.
-2. **This file** ({{overlay.contract}}).
+2. **This file** -- the compiled operating contract (AGENTS.md; the venture overlay is included below).
 3. The venture layer: {{overlay.product}}{{#overlay.canon}} + the canon ({{overlay.canon}}){{/overlay.canon}}.
 {{#state.generator}}4. **Run the state generator** ({{state.generator}}) -- it prints the live "where we are right now", read fresh from the system at boot. Its output is gitignored on purpose: a *committed* copy would be stale, so always regenerate and treat any checked-in copy as stale.
 {{/state.generator}}

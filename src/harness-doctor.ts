@@ -4,6 +4,7 @@ import { KERNEL_DEFAULTS, KERNEL_VERSION, KERNEL_TIER_REGISTRY } from "./harness
 import { compileTargets } from "./harness-emit";
 import { resolveSecret as machineLocalResolveSecret } from "./harness-secrets";
 import { tierEnv } from "./harness-dispatch";
+import { isEligible } from "./harness-automate";
 
 /**
  * The harness/v1 doctor (Phase 0, 0.4) -- the STANDING conformance verdict
@@ -80,6 +81,20 @@ export function doctorProject(manifestPath: string, opts: DoctorOptions = {}): H
   const refs = resolved.secrets?.refs ?? [];
   const unresolved = refs.filter((r) => !resolveSecret(r));
   if (unresolved.length) findings.push({ check: "secrets", level: "red", message: `secrets.refs not resolvable machine-local: ${unresolved.join(", ")}` });
+
+  // durability tripwire: eligible automations run machine-local (cron/launchd)
+  // until adopted onto a durable engine. This yellow IS the "when do we need
+  // Inngest" answer -- it stands until the loops either stay fine machine-local
+  // or the felt trigger fires (must run laptop-closed / survive interruption /
+  // retry across hours), at which point adopt Inngest per docs/harness/12.
+  const eligibleLoops = (resolved.automations ?? []).filter((a) => isEligible(a));
+  if (eligibleLoops.length > 0) {
+    findings.push({
+      check: "durability",
+      level: "yellow",
+      message: `${eligibleLoops.length} eligible automation(s) run machine-local; graduate to Inngest when a loop must run laptop-closed, survive interruption, or retry across hours (docs/harness/cron.md)`,
+    });
+  }
 
   // perimeter: deploy surface needs a non-empty exclude set.
   if (resolved.perimeter?.deploy && !(resolved.perimeter.exclude?.length)) {

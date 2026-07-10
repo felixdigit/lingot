@@ -86,7 +86,8 @@ export function canonicalPath(path: string): string {
 }
 
 /** Detects a linked git worktree: `.git` is a file whose gitdir points into ".git/worktrees/". */
-function detectWorktree(dir: string): { of: string; branch: string } | undefined {
+/** Exported for reuse by harness-hygiene.ts (the complementary git-hygiene lens, Order K). */
+export function detectWorktree(dir: string): { of: string; branch: string } | undefined {
   const gitPath = join(dir, ".git");
   if (!existsSync(gitPath) || !statSync(gitPath).isFile()) return undefined;
   const content = readFileSync(gitPath, "utf8").trim();

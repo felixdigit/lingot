@@ -66,7 +66,12 @@ export interface OrchestrationBlock {
 
 /** L5: memory backend + store + the living surfaces the contract/cold-boot reference. store null = declared-stateless. */
 export interface StateBlock {
-  readonly memory?: { readonly backend?: string; readonly source?: string };
+  readonly memory?: {
+    readonly backend?: string;
+    readonly source?: string;
+    /** Venture-local retrieval command (e.g. "pnpm brain:query"); the EXECUTOR runs it (parent env) with the task as one arg and feeds stdout into the run's compiled context. */
+    readonly retrieval?: string;
+  };
   readonly store?: { readonly project?: string; readonly schema?: string } | null;
   /** Shared work queue / external memory (e.g. "pnpm worksite (/op/worksite)"). */
   readonly worksite?: string;
@@ -157,6 +162,17 @@ export interface AuthoringBlock {
   readonly emit?: readonly string[]; // e.g. ["agents-md", "claude-dir"]
 }
 
+/** L6 extension: the Slack notify sink (docs/harness/slack-notify-map.md). Channel IDs only -- the
+ * bot token resolves machine-local (L9, SLACK_BOT_TOKEN), never in the manifest. */
+export interface NotifySlackBlock {
+  readonly worksite?: string;
+  readonly ops?: string;
+  readonly events?: readonly string[];
+}
+export interface NotifyBlock {
+  readonly slack?: NotifySlackBlock;
+}
+
 export interface HarnessManifest {
   /** Schema tag: "harness/v1". */
   readonly harness: string;
@@ -179,6 +195,7 @@ export interface HarnessManifest {
   readonly perimeter?: PerimeterBlock;
   readonly automations?: readonly Automation[];
   readonly authoring?: AuthoringBlock;
+  readonly notify?: NotifyBlock;
   readonly overlay?: {
     readonly contract?: string | null;
     readonly canon?: string | null;
@@ -256,6 +273,24 @@ export function loadHarnessManifest(path: string): HarnessManifestLoadResult {
   if (m.studio !== undefined) {
     if (!Array.isArray(m.studio.scan) || typeof m.studio.registry !== "string") {
       errors.push(`${path}: studio block must carry scan[] + registry`);
+    }
+  }
+  if (m.notify !== undefined) {
+    const slack = m.notify.slack;
+    if (slack !== undefined) {
+      if (typeof slack !== "object" || slack === null) {
+        errors.push(`${path}: notify.slack must be an object`);
+      } else {
+        if (slack.worksite !== undefined && typeof slack.worksite !== "string") {
+          errors.push(`${path}: notify.slack.worksite must be a string channel id`);
+        }
+        if (slack.ops !== undefined && typeof slack.ops !== "string") {
+          errors.push(`${path}: notify.slack.ops must be a string channel id`);
+        }
+        if (slack.events !== undefined && !Array.isArray(slack.events)) {
+          errors.push(`${path}: notify.slack.events must be an array of event names`);
+        }
+      }
     }
   }
   if (Array.isArray(m.automations)) {
