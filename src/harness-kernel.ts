@@ -1,15 +1,27 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { HarnessManifest } from "./harness-manifest";
 
 /**
  * The harness/v1 kernel seed (Phase 0, 0.2b) -- the shared, versioned defaults
- * every project inherits (docs/harness/01 + 02). Code-defined for the seed; a
- * later increment moves it to a versioned, file-based kernel. The two managed
- * (non-overridable) floor keys live here so the band has something to protect:
- * observability.spans + safety.lethal_trifecta_block (see harness-merge
+ * every project inherits (docs/harness/01 + 02). The code half (tier registry,
+ * gate patterns, presets, defaults) lives here; the prose half (contract + pack +
+ * boot templates + default skills) lives in the file kernel at ../kernel/. The
+ * two managed (non-overridable) floor keys live here so the band has something to
+ * protect: observability.spans + safety.lethal_trifecta_block (see harness-merge
  * MANAGED_PATHS). Kept minimal on purpose -- the kernel grows reactively.
  */
 
-export const KERNEL_VERSION = "1.0.0-seed";
+/**
+ * Single source of the kernel version: the file kernel's manifest
+ * (engine/lingot/kernel/kernel.json). Both the emit path (AGENTS.md) and the
+ * compile path (packs) resolve the version from here, so a venture's compiled
+ * contract and its shadow packs always stamp the same number -- the seam the P4
+ * reconciliation closed. Read once at module load; deterministic, no clock.
+ */
+const KERNEL_JSON = join(dirname(fileURLToPath(import.meta.url)), "..", "kernel", "kernel.json");
+export const KERNEL_VERSION: string = (JSON.parse(readFileSync(KERNEL_JSON, "utf8")) as { kernel: string }).kernel;
 
 /**
  * The tier registry -- alias -> concrete (provider, model, transport, role).

@@ -28,24 +28,44 @@ describe("compiledContextFor", () => {
     expect(result.sources).toEqual(["AGENTS.md"]);
   });
 
-  it("large file truncates on a paragraph boundary under budget, no partial paragraph", () => {
+  it("truncation preserves BOTH edges and elides the middle (prompt-design P4)", () => {
+    const anchor = freshAnchor();
+    // Ten 100-char paragraphs (~25 tokens each, ~250 total); a 130-token budget
+    // forces truncation with room for a head slice, the marker, and a tail slice.
+    const paragraphs = Array.from({ length: 10 }, (_, i) => String.fromCharCode(97 + i).repeat(100));
+    writeAgents(anchor, paragraphs.join("\n\n"));
+
+    const result = compiledContextFor(anchor, 130);
+    expect(result.truncated).toBe(true);
+    // Head preserved: opens with the first paragraph.
+    expect(result.text.startsWith(paragraphs[0])).toBe(true);
+    // Tail preserved: closes with the LAST paragraph -- the old tail-first cut
+    // amputated exactly this highest-compliance slot.
+    expect(result.text.endsWith(paragraphs[9])).toBe(true);
+    // The middle is the sacrifice zone, and the elision is marked, not silent.
+    expect(result.text).toContain("elided here for the context budget");
+    expect(result.tokens).toBeLessThanOrEqual(130);
+    expect(result.tokens).toBe(estimateTokens(result.text));
+    // No partial paragraphs: every paragraph present appears in full.
+    for (const p of paragraphs) {
+      const present = result.text.includes(p);
+      if (present) expect(result.text.split(p).length).toBe(2);
+    }
+    expect(result.sources).toEqual(["AGENTS.md"]);
+  });
+
+  it("a budget too tight for both edges keeps the head slice alone (primacy wins)", () => {
     const anchor = freshAnchor();
     const p1 = "a".repeat(100);
     const p2 = "b".repeat(100);
     const p3 = "c".repeat(100);
-    const content = [p1, p2, p3].join("\n\n");
-    writeAgents(anchor, content);
+    writeAgents(anchor, [p1, p2, p3].join("\n\n"));
 
-    expect(estimateTokens(content)).toBeGreaterThan(60);
-
-    const result = compiledContextFor(anchor, 60);
+    // ~25-token budget: head fits one paragraph, no room for marker + tail.
+    const result = compiledContextFor(anchor, 25);
     expect(result.truncated).toBe(true);
-    expect(result.text).toBe([p1, p2].join("\n\n"));
-    expect(result.tokens).toBeLessThanOrEqual(60);
-    expect(result.tokens).toBe(estimateTokens(result.text));
-    // no partial paragraph: every kept paragraph appears in full
-    expect(result.text).not.toContain(p3);
-    expect(result.text.endsWith(p2)).toBe(true);
+    expect(result.text).toBe(p1);
+    expect(result.text).not.toContain("elided");
     expect(result.sources).toEqual(["AGENTS.md"]);
   });
 

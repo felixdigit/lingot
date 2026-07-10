@@ -1,6 +1,6 @@
 {
-  "kernel": "0.1.0-shadow",
-  "description": "Lingot kernel v0 (P4, HX-009): the five concerns as compiled text, extracted from Ortova's organic harness per the P2 extraction map. SHADOW ONLY -- nothing here goes live without the parity gate + Felix's P4-adopt word.",
+  "kernel": "1.0.0-seed",
+  "description": "Lingot kernel v1 (seed): the shared operating-contract + pack + boot templates and default skills every venture inherits, extracted from Ortova's organic harness per the P2 extraction map. This file is the SINGLE SOURCE of the kernel version -- harness-kernel.ts reads `kernel` from here, so the emit path (AGENTS.md) and the compile path (packs) always stamp the same number. LIVE: contract-base.md renders each venture's AGENTS.md through the emit path. SHADOW: the pack + skill compilation (`harness compile`) still writes only to the shadow registry; packs+skills graduate per venture on the parity gate + Felix's adopt word, tracked by compiled.json.shadow -- an adoption status, not a version suffix.",
   "source": "~/work/ortova CLAUDE.md (kernel sections) + docs/founder/buildout/zone-agent-spec.md (the pack constitution) + .claude/skills/boot/SKILL.md, read 2026-07-03",
   "templates": {
     "contract": "contract-base.md",

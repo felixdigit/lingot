@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadHarnessManifest } from "./harness-manifest";
 import { resolveProject } from "./harness-merge";
 import { KERNEL_DEFAULTS, KERNEL_VERSION, KERNEL_TIER_REGISTRY } from "./harness-kernel";
@@ -5,6 +8,7 @@ import { compileTargets } from "./harness-emit";
 import { resolveSecret as machineLocalResolveSecret } from "./harness-secrets";
 import { tierEnv } from "./harness-dispatch";
 import { isEligible } from "./harness-automate";
+import { lintKernelSources, lintAgentsMd } from "./harness-lint";
 
 /**
  * The harness/v1 doctor (Phase 0, 0.4) -- the STANDING conformance verdict
@@ -22,6 +26,11 @@ import { isEligible } from "./harness-automate";
  *  - perimeter: a deploy surface must carry a non-empty exclude set (the S1
  *    footgun -- a deploy with no perimeter re-bloats).
  */
+
+// Resolved the same way harness-compile.ts resolves its own KERNEL_DIR --
+// this file and that one are siblings under engine/lingot/src/, so the
+// identical expression lands on the identical kernel directory.
+const KERNEL_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "kernel");
 
 export type DoctorLevel = "red" | "yellow" | "ok";
 
@@ -99,6 +108,34 @@ export function doctorProject(manifestPath: string, opts: DoctorOptions = {}): H
   // perimeter: deploy surface needs a non-empty exclude set.
   if (resolved.perimeter?.deploy && !(resolved.perimeter.exclude?.length)) {
     findings.push({ check: "perimeter", level: "red", message: "deploy surface declared but perimeter.exclude is empty (S1: deploy would re-bloat)" });
+  }
+
+  // prompt: deterministic prompt-quality lint (research/responses/195-response.md
+  // -- these checks live in compiler code, never delegated to a model) over the
+  // kernel's own prompt units plus the compiled AGENTS.md at this project's
+  // anchor. Any error (a banned em dash, a codec-symbol drift, a missing Done
+  // contract, a hollow slot) is red; a warning alone (e.g. a front rendered
+  // with an empty description) is yellow -- noted, not blocking.
+  const anchor = dirname(manifestPath);
+  const agentsPath = join(anchor, "AGENTS.md");
+  const promptLint = [
+    ...lintKernelSources(KERNEL_DIR),
+    ...(existsSync(agentsPath) ? lintAgentsMd(agentsPath, readFileSync(agentsPath, "utf8")) : []),
+  ];
+  const promptErrors = promptLint.filter((f) => f.severity === "error");
+  const promptWarnings = promptLint.filter((f) => f.severity === "warn");
+  if (promptErrors.length > 0) {
+    findings.push({
+      check: "prompt",
+      level: "red",
+      message: `${promptErrors.length} prompt-lint error(s): ${promptErrors.map((f) => `${f.file}:${f.line} ${f.detail}`).join("; ")}`,
+    });
+  } else if (promptWarnings.length > 0) {
+    findings.push({
+      check: "prompt",
+      level: "yellow",
+      message: `${promptWarnings.length} prompt-lint warning(s) (non-blocking): ${promptWarnings.map((f) => `${f.file}:${f.line} ${f.detail}`).join("; ")}`,
+    });
   }
 
   const verdict = findings.some((f) => f.level === "red") ? "red" : findings.some((f) => f.level === "yellow") ? "yellow" : "green";

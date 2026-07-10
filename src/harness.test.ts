@@ -11,9 +11,10 @@ import { workerEnv } from "./harness-exec";
 import { moderationCheck, railsActive } from "./harness-rails";
 import { doctorProject } from "./harness-doctor";
 import { runCheck, parseCheck } from "./harness-route";
+import { emitAgentsMd } from "./harness-emit";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -341,5 +342,47 @@ describe("automations 4-box eligibility gate", () => {
     expect(missingBoxes(partial)).toEqual(["end_to_end", "objective_done"]);
     expect(isEligible({ name: "z" })).toBe(false);
     expect(missingBoxes({ name: "z" })).toEqual(["repeats", "auto_reject", "end_to_end", "objective_done"]);
+  });
+});
+
+describe("emitAgentsMd fronts -- readCharters description fallback (measured: 10/10 bullets rendered empty, research/responses/195-response.md)", () => {
+  const manifest: any = { identity: { name: "t", kind: "venture", owners: ["felix"] }, context: { charters: "docs/fronts/zone-*.md" } };
+  const freshAnchor = (): string => {
+    const dir = mkdtempSync(join(tmpdir(), "emit-fronts-"));
+    mkdirSync(join(dir, "docs", "fronts"), { recursive: true });
+    return dir;
+  };
+  const charter = (anchor: string, body: string): void => writeFileSync(join(anchor, "docs", "fronts", "zone-1-sales.md"), body);
+
+  it("the explicit \"## description\" header still wins when present", () => {
+    const anchor = freshAnchor();
+    charter(anchor, "# Sales (charter)\n\n## description\n\nThe explicit header description.\n\n## routing\n\nmore stuff\n");
+    const result = emitAgentsMd(manifest, "kernel-test", anchor);
+    expect(result.content).toContain("- **Sales** -- The explicit header description.");
+  });
+
+  it("falls back to a blockquote's first line when no description header exists", () => {
+    const anchor = freshAnchor();
+    charter(anchor, "# Sales (charter)\n\n> The blockquote summary line.\n> a second quoted line\n");
+    const result = emitAgentsMd(manifest, "kernel-test", anchor);
+    expect(result.content).toContain("- **Sales** -- The blockquote summary line.");
+  });
+
+  it("falls back to the first plain paragraph line, skipping a leading HTML comment", () => {
+    const anchor = freshAnchor();
+    charter(
+      anchor,
+      "# Sales (charter)\n\n<!-- an internal note -->\n\nThe plain paragraph summary.\n\nmore body text.\n",
+    );
+    const result = emitAgentsMd(manifest, "kernel-test", anchor);
+    expect(result.content).toContain("- **Sales** -- The plain paragraph summary.");
+  });
+
+  it("a charter with no extractable description renders its bullet with no trailing \" -- \"", () => {
+    const anchor = freshAnchor();
+    charter(anchor, "# Sales (charter)\n\n<!-- only a comment, no real content -->\n");
+    const result = emitAgentsMd(manifest, "kernel-test", anchor);
+    expect(result.content).toContain("- **Sales**\n");
+    expect(result.content).not.toContain("- **Sales** --");
   });
 });

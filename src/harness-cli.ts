@@ -1,5 +1,6 @@
 import { existsSync, statSync, writeFileSync, readFileSync, mkdirSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 /**
@@ -47,7 +48,9 @@ import { routeVerified, parseCheck, runCheck, formatRouteResult } from "./harnes
 import { emitExecNotifications, emitRouteNotifications, emitDriftNotifications, emitCommitNotification } from "./harness-notify-emit";
 import { resolveChannelId, slackUploadFile } from "./harness-slack";
 import { runListener } from "./harness-slack-listen";
+import { runPromptGate, formatPromptGateReport } from "./harness-prompt-gate";
 import { tidy, formatTidyResult } from "./harness-hygiene";
+import { lintKernelSources, lintAgentsMd, formatLintFindings } from "./harness-lint";
 
 /**
  * The harness CLI (Phase 0, 0.3c) -- the terminal operator surface
@@ -62,6 +65,11 @@ import { tidy, formatTidyResult } from "./harness-hygiene";
  * existing lingot.json manifests.
  */
 
+// Resolved the same way harness-compile.ts resolves its own KERNEL_DIR --
+// this file and that one are siblings under engine/lingot/src/, so the
+// identical expression lands on the identical kernel directory.
+const KERNEL_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "kernel");
+
 function usage(): never {
   console.log(
     [
@@ -69,6 +77,8 @@ function usage(): never {
       "  harness boot <dir|manifest> [--dry]",
       "  harness adopt <dir|manifest>",
       "  harness doctor <dir|manifest>",
+      "  harness lint [dir]   (deterministic prompt-quality lint -- kernel sources + AGENTS.md at dir; default \".\")",
+      "  harness prompt-gate <dir> <suite> [--calibrate] [--trials <n>] [--allow-cost] [--baseline <ref>]   (paired A/B eval on a prompt-artifact change)",
       "  harness lock <dir|manifest>",
       "  harness gate-pass <dir|manifest> <suite> [--by <who>]",
       "  harness eval <dir|manifest> <suite> [--tier <default>]",
@@ -144,6 +154,40 @@ if (command === "boot" || command === "adopt") {
   const report = doctorProject(manifestPath);
   console.log(formatHarnessDoctorReport(report));
   process.exit(report.verdict === "red" ? 1 : 0);
+} else if (command === "lint") {
+  // Deterministic prompt-quality lint (research/responses/195-response.md --
+  // these checks live in compiler code, never delegated to a model). Scope:
+  // the kernel's own prompt units, plus the compiled AGENTS.md at the target
+  // anchor (default ".") when one exists on disk.
+  const anchor = positional[0] ?? ".";
+  const agentsPath = join(anchor, "AGENTS.md");
+  const findings = [
+    ...lintKernelSources(KERNEL_DIR),
+    ...(existsSync(agentsPath) ? lintAgentsMd(agentsPath, readFileSync(agentsPath, "utf8")) : []),
+  ];
+  console.log(formatLintFindings(findings));
+  process.exit(findings.some((f) => f.severity === "error") ? 1 : 0);
+} else if (command === "prompt-gate") {
+  // The eval-gated prompt-change loop (docs/harness/prompt-design.md P7): a
+  // paired A/B of the committed baseline vs the working tree on the suite's
+  // bound artifact. SHIP-OK records prompt:<suite> in the gate ledger; every
+  // run appends to the drift history so decay revokes stale passes.
+  const anchor = positional[0];
+  const suiteName = positional[1];
+  if (!anchor || !suiteName) {
+    console.error("usage: harness prompt-gate <dir> <suite> [--calibrate] [--trials <n>] [--allow-cost] [--baseline <ref>]");
+    process.exit(2);
+  }
+  const tIdx = args.indexOf("--trials");
+  const bIdx = args.indexOf("--baseline");
+  const report = await runPromptGate(anchor, suiteName, {
+    calibrate: flags.has("--calibrate"),
+    allowCost: flags.has("--allow-cost"),
+    ...(tIdx !== -1 ? { trials: parseInt(args[tIdx + 1], 10) || undefined } : {}),
+    ...(bIdx !== -1 && args[bIdx + 1] ? { baselineRef: args[bIdx + 1] } : {}),
+  });
+  console.log(formatPromptGateReport(report));
+  process.exit(report.verdict === "SHIP-OK" || report.verdict === "NO-CHANGE" || report.verdict === "CALIBRATE" ? 0 : 1);
 } else if (command === "lock") {
   const target = positional[0];
   if (!target) usage();

@@ -53,9 +53,58 @@ interface Front {
 }
 
 /**
+ * Fallback front description when the charter carries no "## description"
+ * header (measured, research/responses/195-response.md: 10/10 compiled front
+ * bullets rendered with an empty description because the briefs don't carry
+ * that header). Reads forward from the end of the H1 title line, skipping
+ * blanks, HTML comment lines, horizontal rules, and heading lines, and takes
+ * the first real content line as the one-line summary -- stripping a leading
+ * blockquote/bullet marker, collapsing internal whitespace, and truncating to
+ * 160 characters at a word boundary (only when truncation actually happens).
+ */
+function fallbackFrontDescription(text: string, titleEnd: number): string {
+  let inComment = false;
+  for (const raw of text.slice(titleEnd).split("\n")) {
+    const line = raw.trim();
+    if (inComment) {
+      if (line.includes("-->")) inComment = false;
+      continue;
+    }
+    if (!line) continue;
+    if (line.includes("<!--")) {
+      if (!line.includes("-->")) inComment = true;
+      continue;
+    }
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) continue; // a horizontal rule
+    if (/^#{1,6}\s/.test(line)) continue; // a heading line
+    if (/^`{3,}/.test(line)) continue; // a code-fence line is never a description
+    // House style holds on COMPILED prose even when the source brief predates
+    // it: em dashes and codec symbols normalize to ASCII (the lint gates the
+    // emitted artifact, so emit must produce what the lint accepts).
+    const collapsed = line
+      .replace(/^(>|-|\*)\s+/, "")
+      .replace(/—/g, "--")
+      .replace(/≠/g, "!=")
+      .replace(/→/g, "->")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!collapsed) continue;
+    if (/^\**(date|status|inputs?|owners?|authors?|for)\**\s*:/i.test(collapsed)) continue; // brief metadata, not a description
+    if (collapsed.length <= 160) return collapsed;
+    const cut = collapsed.slice(0, 160);
+    const lastSpace = cut.lastIndexOf(" ");
+    return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd() + "...";
+  }
+  return "";
+}
+
+/**
  * Read the venture's front charters (context.charters, e.g. "docs/fronts/zone-*.md")
  * relative to the anchor, and extract each front's name + one-line description.
  * Minimal single-`*` glob over one directory. Missing dir -> no fronts (safe).
+ * Description source order: the explicit "## description" header first;
+ * fallbackFrontDescription (the first real content line after the title)
+ * when that header is absent or empty.
  */
 function readCharters(anchor: string, glob: string): Front[] {
   const slash = glob.lastIndexOf("/");
@@ -78,9 +127,11 @@ function readCharters(anchor: string, glob: string): Front[] {
     }
     const nameM = text.match(/^#\s*(.+?)\s*$/m);
     const descM = text.match(/##\s*description\s*\n+([\s\S]*?)(?:\n##\s|$)/i);
+    const headerDescription = (descM?.[1] ?? "").trim().split("\n")[0].trim();
+    const titleEnd = nameM ? (nameM.index ?? 0) + nameM[0].length : 0;
     out.push({
       name: (nameM?.[1] ?? f).replace(/\s*\(charter\)\s*$/i, "").trim(),
-      description: (descM?.[1] ?? "").trim().split("\n")[0].trim(),
+      description: headerDescription || fallbackFrontDescription(text, titleEnd),
     });
   }
   return out;
@@ -180,7 +231,10 @@ export function emitAgentsMd(resolved: HarnessManifest, kernelVersion: string, a
   const fronts = anchor && resolved.context?.charters ? readCharters(anchor, resolved.context.charters) : [];
   if (fronts.length) {
     lines.push("", "## Fronts -- the org chart (generated from the charters)");
-    for (const fr of fronts) lines.push(`- **${fr.name}** -- ${fr.description}`);
+    // A charter with no extractable description renders a bare bullet -- never
+    // a dangling trailing " -- " (that shape is exactly what harness-lint's
+    // front-desc rule flags).
+    for (const fr of fronts) lines.push(fr.description ? `- **${fr.name}** -- ${fr.description}` : `- **${fr.name}**`);
   }
 
   // Venture overlay inclusion: a hand-authored docs/operating-overlay.md is the

@@ -18,12 +18,20 @@ export interface CompiledContext {
 
 const DEFAULT_BUDGET = 6000;
 
+/** Head share of the budget under truncation: primacy dominates the U-curve, so
+ * the head keeps the larger slice; the tail keeps the actionable floor. */
+const HEAD_SHARE = 0.65;
+
 /**
  * Reads <anchor>/AGENTS.md and budgets it to `budgetTokens` (default 6000). Missing
- * file -> empty context, never throws. Over budget -> truncate on paragraph
- * boundaries (split on \n\n), accumulating paragraphs while the running
- * estimateTokens total stays <= budget. Never cuts mid-paragraph; always keeps at
- * least the first paragraph even if it alone exceeds the budget.
+ * file -> empty context, never throws. Over budget -> EDGE-PRESERVING truncation
+ * on paragraph boundaries (docs/harness/prompt-design.md P4: attention over long
+ * context is a U-curve -- both edges beat the middle, so truncation drops the
+ * middle and never amputates an edge; the old tail-first cut removed exactly the
+ * highest-compliance slot). The head keeps HEAD_SHARE of the budget (primacy
+ * dominates), the tail keeps the rest, and an elision line marks what was
+ * dropped. Never cuts mid-paragraph; always keeps at least the first paragraph
+ * even if it alone exceeds the budget.
  */
 export function compiledContextFor(anchor: string, budgetTokens: number = DEFAULT_BUDGET): CompiledContext {
   let raw: string;
@@ -39,19 +47,42 @@ export function compiledContextFor(anchor: string, budgetTokens: number = DEFAUL
   }
 
   const paragraphs = raw.split("\n\n");
-  const kept: string[] = [paragraphs[0]];
-  let text = paragraphs[0];
-  let tokens = estimateTokens(text);
-  for (let i = 1; i < paragraphs.length; i++) {
-    const candidate = kept.concat(paragraphs[i]).join("\n\n");
-    const candidateTokens = estimateTokens(candidate);
-    if (candidateTokens > budgetTokens) break;
-    kept.push(paragraphs[i]);
-    text = candidate;
-    tokens = candidateTokens;
+
+  // Head pass: accumulate from the top while under the head share.
+  const headBudget = Math.floor(budgetTokens * HEAD_SHARE);
+  const head: string[] = [paragraphs[0]];
+  let headTokens = estimateTokens(paragraphs[0]);
+  let headEnd = 1; // index of the first paragraph NOT in the head
+  for (; headEnd < paragraphs.length; headEnd++) {
+    const t = estimateTokens(head.concat(paragraphs[headEnd]).join("\n\n"));
+    if (t > headBudget) break;
+    head.push(paragraphs[headEnd]);
+    headTokens = t;
   }
 
-  return { text, tokens, truncated: true, sources: ["AGENTS.md"] };
+  // Tail pass: accumulate from the bottom with the remaining budget, stopping
+  // before overlapping the head. The elision marker is charged to the budget.
+  const marker = (n: number): string => `[... ${n} paragraph(s) elided here for the context budget -- middle-priority content; both edges preserved per prompt-design P4 ...]`;
+  const tail: string[] = [];
+  let tailStart = paragraphs.length; // index of the first paragraph IN the tail
+  for (let i = paragraphs.length - 1; i >= headEnd; i--) {
+    const candidateTail = [paragraphs[i], ...tail];
+    const elided = i - headEnd;
+    const total = estimateTokens([...head, marker(Math.max(elided, 1)), ...candidateTail].join("\n\n"));
+    if (total > budgetTokens) break;
+    tail.unshift(paragraphs[i]);
+    tailStart = i;
+  }
+
+  const elidedCount = tailStart - headEnd;
+  if (tail.length === 0 || elidedCount <= 0) {
+    // Budget too tight for both edges: keep the head slice alone (primacy wins).
+    const text = head.join("\n\n");
+    return { text, tokens: estimateTokens(text), truncated: true, sources: ["AGENTS.md"] };
+  }
+
+  const text = [...head, marker(elidedCount), ...tail].join("\n\n");
+  return { text, tokens: estimateTokens(text), truncated: true, sources: ["AGENTS.md"] };
 }
 
 export interface RetrievedMemory {

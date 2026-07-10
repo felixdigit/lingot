@@ -24,3 +24,5 @@ You are being assigned to one {{name}} sprint, and this terminal is dedicated to
 6. **Worktree rule.** If two or more *build* tiles are being worked in parallel terminals, the later ones work in a dedicated git worktree instead of the shared checkout (research/ops work doesn't need this). Create it with the venture's helper -- never by hand, never by copying files. A fresh worktree agent is born without `node_modules` -- STEP 0 is the venture's bootstrap script before any typecheck/validate.
 
 Stay inside this sprint's scope -- the other sprints run in their own terminals. Honor {{overlay.contract}} and the brief's constraints.
+
+**Done** = oriented and working: the context pack and the docs it points to actually read, the identity line printed, exactly one tile claimed (or the empty-queue report given) -- and at handoff the tile parks at review with its outcome line honest, never self-closed.
