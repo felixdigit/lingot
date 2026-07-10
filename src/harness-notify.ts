@@ -13,13 +13,17 @@ export interface NotifyConfig {
   readonly worksite?: string;
   /** Channel id -- alerts (holds, drift, cost, failures). */
   readonly ops?: string;
+  /** Channel id -- live artefact stream (Order P). No routed NotifyKind targets
+   * it: artefact uploads fire straight through `harness post --channel telemetry`,
+   * not through `notify()`/`routeEvent`. */
+  readonly telemetry?: string;
   /** Venture may trim the kernel default event set. */
   readonly events?: readonly string[];
 }
 
-export type NotifyKind = "dispatch" | "artefact" | "gate-held" | "drift" | "failure" | "digest";
+export type NotifyKind = "dispatch" | "artefact" | "gate-held" | "drift" | "failure" | "digest" | "commit";
 
-/** The kernel default routing: dispatch/artefact -> worksite; gate-held/drift/failure/digest -> ops. */
+/** The kernel default routing: dispatch/artefact/commit -> worksite; gate-held/drift/failure/digest -> ops. */
 const KIND_TARGET: Readonly<Record<NotifyKind, "worksite" | "ops">> = {
   dispatch: "worksite",
   artefact: "worksite",
@@ -27,6 +31,7 @@ const KIND_TARGET: Readonly<Record<NotifyKind, "worksite" | "ops">> = {
   drift: "ops",
   failure: "ops",
   digest: "ops",
+  commit: "worksite",
 };
 
 /**
@@ -192,6 +197,38 @@ export function formatDigest(ev: {
   return { text, blocks };
 }
 
+/**
+ * A landed commit (Order N) -- the Slack notify surface's blind spot: exec/
+ * route/drift runs post, but interactive-session work (which lands as a
+ * commit, not a harness dispatch) didn't. Deterministic, $0 -- no LLM call.
+ */
+export function formatCommit(ev: {
+  venture: string;
+  sha: string;
+  subject: string;
+  filesChanged?: number;
+  insertions?: number;
+  deletions?: number;
+  branch?: string;
+}): FormattedMessage {
+  const sha7 = ev.sha.slice(0, 7);
+  const subjectLine = (ev.subject.split("\n")[0] ?? "").trim();
+
+  const statBits: string[] = [];
+  if (ev.filesChanged !== undefined) statBits.push(`${ev.filesChanged} file${ev.filesChanged === 1 ? "" : "s"}`);
+  if (ev.insertions !== undefined || ev.deletions !== undefined) statBits.push(`+${ev.insertions ?? 0}/-${ev.deletions ?? 0}`);
+  if (ev.branch) statBits.push(ev.branch);
+
+  const text = [`[${ev.venture}] commit ${sha7}: ${subjectLine}`, ...(statBits.length ? [statBits.join(", ")] : [])].join(" -- ");
+
+  const blocks = [
+    headerBlock(`:pencil: ${ev.venture} · commit ${sha7}`),
+    sectionBlock(subjectLine),
+    ...(statBits.length ? [contextBlock(statBits.join(" · "))] : []),
+  ];
+  return { text, blocks };
+}
+
 const FORMATTERS: Readonly<Record<NotifyKind, (ev: any) => FormattedMessage>> = {
   dispatch: formatDispatch,
   artefact: formatArtefact,
@@ -199,6 +236,7 @@ const FORMATTERS: Readonly<Record<NotifyKind, (ev: any) => FormattedMessage>> = 
   drift: formatDrift,
   failure: formatFailure,
   digest: formatDigest,
+  commit: formatCommit,
 };
 
 /**

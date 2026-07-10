@@ -167,6 +167,8 @@ export interface AuthoringBlock {
 export interface NotifySlackBlock {
   readonly worksite?: string;
   readonly ops?: string;
+  /** Live artefact stream channel id (Order P) -- images post here in near-real-time. */
+  readonly telemetry?: string;
   readonly events?: readonly string[];
 }
 export interface NotifyBlock {
@@ -196,6 +198,8 @@ export interface HarnessManifest {
   readonly automations?: readonly Automation[];
   readonly authoring?: AuthoringBlock;
   readonly notify?: NotifyBlock;
+  /** Venture-specific skill sources beyond the kernel's defaultSkills: paths (or a single-`*` glob) to SKILL.md-shaped markdown, relative to the anchor. */
+  readonly skills?: readonly string[];
   readonly overlay?: {
     readonly contract?: string | null;
     readonly canon?: string | null;
@@ -287,10 +291,18 @@ export function loadHarnessManifest(path: string): HarnessManifestLoadResult {
         if (slack.ops !== undefined && typeof slack.ops !== "string") {
           errors.push(`${path}: notify.slack.ops must be a string channel id`);
         }
+        if (slack.telemetry !== undefined && typeof slack.telemetry !== "string") {
+          errors.push(`${path}: notify.slack.telemetry must be a string channel id`);
+        }
         if (slack.events !== undefined && !Array.isArray(slack.events)) {
           errors.push(`${path}: notify.slack.events must be an array of event names`);
         }
       }
+    }
+  }
+  if (m.skills !== undefined) {
+    if (!Array.isArray(m.skills) || m.skills.some((s) => typeof s !== "string")) {
+      errors.push(`${path}: skills must be an array of strings (paths or a single-* glob to venture skill sources)`);
     }
   }
   if (Array.isArray(m.automations)) {

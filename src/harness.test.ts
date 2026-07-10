@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { deepMerge, enforceManagedBand, resolveProject } from "./harness-merge";
-import { isHarnessManifest } from "./harness-manifest";
+import { isHarnessManifest, loadHarnessManifest } from "./harness-manifest";
 import { tierEnv, formatTierEnv } from "./harness-dispatch";
 import type { TierEntry } from "./harness-kernel";
 import { summarizeUsage, estimateCostUsd, costPerAccepted } from "./harness-usage";
@@ -49,6 +49,56 @@ describe("isHarnessManifest", () => {
     expect(isHarnessManifest({ harness: "harness/v1", identity: {} })).toBe(true);
     expect(isHarnessManifest({ manifest: "lingot/v0", identity: {} })).toBe(false);
     expect(isHarnessManifest({ name: "block", domain: "x" })).toBe(false);
+  });
+});
+
+describe("HarnessManifest.skills -- declared, validated, carried through resolve", () => {
+  const base = { harness: "harness/v1", identity: { name: "x", kind: "venture", owners: ["felix"] }, kernel: { version: "~>1" } };
+
+  it("accepts an array of strings", () => {
+    const dir = mkdtempSync(join(tmpdir(), "skills-manifest-"));
+    const path = join(dir, "harness.json");
+    writeFileSync(path, JSON.stringify({ ...base, skills: ["docs/skills/pricing.md"] }));
+    const { manifest, errors } = loadHarnessManifest(path);
+    expect(errors).toEqual([]);
+    expect(manifest?.skills).toEqual(["docs/skills/pricing.md"]);
+  });
+
+  it("rejects a non-array / non-string-array skills value", () => {
+    const dir = mkdtempSync(join(tmpdir(), "skills-manifest-"));
+    const path = join(dir, "harness.json");
+    writeFileSync(path, JSON.stringify({ ...base, skills: "docs/skills/pricing.md" }));
+    const { manifest, errors } = loadHarnessManifest(path);
+    expect(manifest).toBeUndefined();
+    expect(errors.some((e) => e.includes("skills must be an array of strings"))).toBe(true);
+  });
+
+  it("resolveProject carries the venture's skills declaration through the kernel-defaults merge", () => {
+    const manifest: any = { ...base, skills: ["docs/skills/pricing.md"] };
+    const result = resolveProject({}, manifest);
+    expect(result.resolved?.skills).toEqual(["docs/skills/pricing.md"]);
+  });
+});
+
+describe("notify.slack.telemetry (Order P -- live artefact channel)", () => {
+  const base = { harness: "harness/v1", identity: { name: "x", kind: "venture", owners: ["felix"] }, kernel: { version: "~>1" } };
+
+  it("accepts a string channel id alongside worksite/ops", () => {
+    const dir = mkdtempSync(join(tmpdir(), "telemetry-manifest-"));
+    const path = join(dir, "harness.json");
+    writeFileSync(path, JSON.stringify({ ...base, notify: { slack: { worksite: "C_W", ops: "C_O", telemetry: "C_T" } } }));
+    const { manifest, errors } = loadHarnessManifest(path);
+    expect(errors).toEqual([]);
+    expect(manifest?.notify?.slack?.telemetry).toBe("C_T");
+  });
+
+  it("rejects a non-string telemetry value", () => {
+    const dir = mkdtempSync(join(tmpdir(), "telemetry-manifest-"));
+    const path = join(dir, "harness.json");
+    writeFileSync(path, JSON.stringify({ ...base, notify: { slack: { telemetry: 123 } } }));
+    const { manifest, errors } = loadHarnessManifest(path);
+    expect(manifest).toBeUndefined();
+    expect(errors.some((e) => e.includes("notify.slack.telemetry must be a string channel id"))).toBe(true);
   });
 });
 

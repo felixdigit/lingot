@@ -38,13 +38,13 @@ import { fireEligible } from "./harness-cron";
 import { driftCycle, sweepDrift } from "./harness-recompile";
 import { railsActive, moderationCheck } from "./harness-rails";
 import { recordDispatch, readUsage, summarizeUsage, formatUsage } from "./harness-usage";
-import { KERNEL_TIER_REGISTRY, KERNEL_DEFAULTS } from "./harness-kernel";
+import { KERNEL_TIER_REGISTRY, KERNEL_DEFAULTS, expandToolPresets } from "./harness-kernel";
 import { loadHarnessManifest } from "./harness-manifest";
 import { resolveProject } from "./harness-merge";
 import { formatAutomations, fireAutomation } from "./harness-automate";
 import { executeTask } from "./harness-exec";
 import { routeVerified, parseCheck, runCheck, formatRouteResult } from "./harness-route";
-import { emitExecNotifications, emitRouteNotifications, emitDriftNotifications } from "./harness-notify-emit";
+import { emitExecNotifications, emitRouteNotifications, emitDriftNotifications, emitCommitNotification } from "./harness-notify-emit";
 import { resolveChannelId, slackUploadFile } from "./harness-slack";
 import { runListener } from "./harness-slack-listen";
 import { tidy, formatTidyResult } from "./harness-hygiene";
@@ -76,16 +76,17 @@ function usage(): never {
       "  harness drift <dir|manifest> <suite>|--all [--window <n>] [--drop <0-1>] [--respond|--recompile]   (decay -> revoke -> re-materialize)",
       "  harness automate <dir|manifest> [--fire <name>] [--fire-eligible]",
       "  harness plan <dir|manifest> <plan.jsonl> [--concurrency <n>]   (multi-unit verified routing)",
-      "  harness exec <dir|manifest> \"<task>\" [--tier <alias>] [--model <m>] [--tools <A,B>]   (run on the executor)",
+      "  harness exec <dir|manifest> \"<task>\" [--tier <alias>] [--model <m>] [--tools <A,B|read|build|research>]   (run on the executor; --tools presets expand: read|build|research)",
       "  harness route <dir|manifest> --work-type <X> --check <spec> [--tier <cheap>] \"<prompt>\"   (verified labor routing)",
       "  harness run --tier <alias> [\"<prompt>\"] [--dry] [-- <cmd...>]   (full Claude Code on the tier)",
       "  harness ask --tier <alias> \"<prompt>\"                          (lean: direct model call, no agent context)",
       "  harness batch --tier <alias> --file <tasks.txt> [--out <dir>]   (lean fan-out)",
       "  harness usage [dir] [--fleet] [--tail <n>]   (spend + accepted, per tier / per venture / last n)",
       "  harness audit [dir] [--tail <n>]   (the gate's allow/deny/held decision trail)",
-      '  harness post <file> [--channel <C...|#name|worksite|ops>] [--say "caption"] [--dir <venture>]   (post a file to Slack)',
+      '  harness post <file> [--channel <C...|#name|worksite|ops|telemetry>] [--say "caption"] [--dir <venture>]   (post a file to Slack)',
       "  harness slack listen [dir]   (Socket Mode two-way listener -- fail-closed w/o SLACK_APP_TOKEN + SLACK_OPERATOR_ID)",
       "  harness tidy [dir] [--apply] [--include-gone]   (SAFE janitor -- dry-run by default; git branch -d + git worktree prune only)",
+      "  harness notify-commit [dir] [--sha <sha>]   (post HEAD, or --sha, to worksite; fail-soft hook helper -- see .husky/post-commit)",
     ].join("\n"),
   );
   process.exit(2);
@@ -556,7 +557,7 @@ if (command === "boot" || command === "adopt") {
   const tierIdx = args.indexOf("--tier");
   const tier = tierIdx !== -1 ? args[tierIdx + 1] : undefined;
   const toolsIdx = args.indexOf("--tools");
-  const allowedTools = toolsIdx !== -1 ? args[toolsIdx + 1].split(",").map((s) => s.trim()).filter(Boolean) : undefined;
+  const allowedTools = toolsIdx !== -1 ? expandToolPresets(args[toolsIdx + 1].split(",").map((s) => s.trim()).filter(Boolean)) : undefined;
   const clearIdx = args.indexOf("--clear");
   const clear = clearIdx !== -1 ? args[clearIdx + 1].split(",").map((s) => s.trim()).filter(Boolean) : undefined;
   const timeoutIdx = args.indexOf("--timeout");
@@ -657,7 +658,7 @@ if (command === "boot" || command === "adopt") {
 } else if (command === "post") {
   const file = positional[0];
   if (!file) {
-    console.error('usage: harness post <file> [--channel <C...|#name|worksite|ops>] [--say "caption"] [--dir <venture>]');
+    console.error('usage: harness post <file> [--channel <C...|#name|worksite|ops|telemetry>] [--say "caption"] [--dir <venture>]');
     process.exit(2);
   }
   const channelIdx = args.indexOf("--channel");
@@ -668,7 +669,7 @@ if (command === "boot" || command === "adopt") {
   const dir = dirIdx !== -1 ? args[dirIdx + 1] : ".";
 
   let channel: string | null = null;
-  if (channelArg === "worksite" || channelArg === "ops") {
+  if (channelArg === "worksite" || channelArg === "ops" || channelArg === "telemetry") {
     const manifestPath = resolveManifestPath(dir);
     if (!manifestPath) {
       console.error(`no harness/v1 manifest found at ${dir}`);
@@ -714,6 +715,22 @@ if (command === "boot" || command === "adopt") {
   const dir = positional[0] ?? process.cwd();
   const result = tidy(dir, { apply: flags.has("--apply"), includeGone: flags.has("--include-gone") });
   console.log(formatTidyResult(result));
+  process.exit(0);
+} else if (command === "notify-commit") {
+  // A `.husky/post-commit` hook helper (Order N), fired detached/backgrounded --
+  // fail-soft always: no manifest, no notify config, or a Slack hiccup are all
+  // silent no-ops (exit 0), never a reason to make `git commit` look broken.
+  const dir = positional[0] ?? process.cwd();
+  const shaIdx = args.indexOf("--sha");
+  const sha = shaIdx !== -1 ? args[shaIdx + 1] : undefined;
+  const manifestPath = resolveManifestPath(dir);
+  if (manifestPath) {
+    try {
+      await emitCommitNotification(manifestPath, { ...(sha ? { sha } : {}), repoRoot: dirname(manifestPath) });
+    } catch {
+      // fail-soft -- see module doc.
+    }
+  }
   process.exit(0);
 } else {
   usage();

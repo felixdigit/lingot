@@ -8,6 +8,7 @@ import {
   formatDrift,
   formatFailure,
   formatDigest,
+  formatCommit,
   summarizeTask,
   type NotifyConfig,
 } from "./harness-notify";
@@ -36,6 +37,10 @@ describe("routeEvent", () => {
     expect(routeEvent("digest", cfg)).toBe("C_OPS");
   });
 
+  it("commit routes to worksite (it's work, not an alert)", () => {
+    expect(routeEvent("commit", cfg)).toBe("C_WORKSITE");
+  });
+
   it("a trimmed event returns null", () => {
     const trimmed: NotifyConfig = { ...cfg, events: ["dispatch"] };
     expect(routeEvent("failure", trimmed)).toBeNull();
@@ -45,6 +50,15 @@ describe("routeEvent", () => {
   it("an unset target channel returns null", () => {
     expect(routeEvent("dispatch", { ops: "C_OPS" })).toBeNull();
     expect(routeEvent("failure", { worksite: "C_WORKSITE" })).toBeNull();
+  });
+});
+
+describe("NotifyConfig.telemetry (Order P)", () => {
+  it("is accepted alongside worksite/ops and carried on the config -- no NotifyKind routes to it, artefacts upload straight via `harness post --channel telemetry` instead of notify()", () => {
+    const withTelemetry: NotifyConfig = { worksite: "C_WORKSITE", ops: "C_OPS", telemetry: "C_TELEMETRY" };
+    expect(withTelemetry.telemetry).toBe("C_TELEMETRY");
+    expect(routeEvent("dispatch", withTelemetry)).toBe("C_WORKSITE");
+    expect(routeEvent("failure", withTelemetry)).toBe("C_OPS");
   });
 });
 
@@ -183,6 +197,58 @@ describe("formatters -- deterministic, render key fields + non-empty blocks", ()
     expect(text).toContain("tier_swap");
     expect(blocks.length).toBeGreaterThan(0);
   });
+
+  it("formatCommit", () => {
+    const { text, blocks } = formatCommit({
+      venture: "agency",
+      sha: "abc1234def5678900000000000000000000000",
+      subject: "feat(agency): add lead scorer",
+      filesChanged: 3,
+      insertions: 42,
+      deletions: 7,
+      branch: "main",
+    });
+    expect(text).toContain("agency");
+    expect(text).toContain("abc1234");
+    expect(text).not.toContain("abc1234def5678900000000000000000000000");
+    expect(text).toContain("feat(agency): add lead scorer");
+    expect(text).toContain("3 files");
+    expect(text).toContain("+42/-7");
+    expect(text).toContain("main");
+
+    const header: any = blocks[0];
+    expect(header.type).toBe("header");
+    expect(header.text.text).toContain(":pencil:");
+    expect(header.text.text).toContain("agency");
+    expect(header.text.text).toContain("abc1234");
+    expect(header.text.text).not.toContain("abc1234def5678900000000000000000000000");
+
+    const section: any = blocks[1];
+    expect(section.text.text).toBe("feat(agency): add lead scorer");
+
+    const context: any = blocks[2];
+    expect(context.elements[0].text).toContain("3 files");
+    expect(context.elements[0].text).toContain("+42/-7");
+    expect(context.elements[0].text).toContain("main");
+  });
+
+  it("formatCommit takes only the first line of a multi-line commit message", () => {
+    const { text, blocks } = formatCommit({
+      venture: "agency",
+      sha: "1234567abcdef",
+      subject: "feat: short subject\n\nA much longer body explaining why, with detail that\nshould never leak into the Slack card.",
+    });
+    expect(text).toContain("feat: short subject");
+    expect(text).not.toContain("should never leak");
+    const section: any = blocks[1];
+    expect(section.text.text).toBe("feat: short subject");
+  });
+
+  it("formatCommit omits stat parts that are absent", () => {
+    const { text, blocks } = formatCommit({ venture: "agency", sha: "1234567abcdef", subject: "chore: bump" });
+    expect(text).not.toContain("--");
+    expect(blocks.length).toBe(2);
+  });
 });
 
 describe("notify", () => {
@@ -200,6 +266,19 @@ describe("notify", () => {
     expect(body.text).toContain("agency");
     expect(Array.isArray(body.blocks)).toBe(true);
     expect(body.blocks.length).toBeGreaterThan(0);
+  });
+
+  it("commit routes, formats, and posts to worksite", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ ok: true, ts: "2.2", channel: "C_WORKSITE" }));
+    const res = await notify(
+      { kind: "commit", venture: "agency", sha: "1234567abcdef", subject: "feat: thing" },
+      cfg,
+      { env: withToken, fetchFn },
+    );
+    expect(res.ok).toBe(true);
+    const body = JSON.parse(fetchFn.mock.calls[0][1].body);
+    expect(body.channel).toBe("C_WORKSITE");
+    expect(body.text).toContain("1234567");
   });
 
   it("unrouted/trimmed/unset kind -> skip, no fetch call", async () => {

@@ -1,4 +1,6 @@
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import { existsSync, readFileSync, appendFileSync, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { loadHarnessManifest } from "./harness-manifest";
 import { notify, type NotifyConfig } from "./harness-notify";
 import { slackUploadFile, type SlackFetch } from "./harness-slack";
@@ -18,6 +20,13 @@ import { appendLedger } from "./harness-run-ledger";
  * failure) that gets back a Slack `ts` also writes a run-ledger entry keyed by
  * that `ts` -- the Socket Mode listener (harness-slack-listen.ts) reads it back
  * to map a reaction/reply to the run + op it belongs to.
+ *
+ * Order N extends this layer again: `emitCommitNotification` is called from a
+ * `.husky/post-commit` hook (fire-and-forget, detached -- see harness-cli.ts's
+ * `notify-commit` verb), not from a token-holding parent process awaiting an
+ * exit code. It reads the commit via injectable git rather than trusting an
+ * in-process result, and dedups by sha via `.harness/commit-ledger.txt` so a
+ * re-run (or a manual `--sha` replay) never double-posts.
  */
 
 export interface EmitOpts {
@@ -173,6 +182,106 @@ export async function emitRouteNotifications(
     }
   } catch {
     // never throws.
+  }
+}
+
+export type GitExecFn = (cmd: string, args: string[], cwd: string) => string;
+
+function defaultGitExec(cmd: string, args: string[], cwd: string): string {
+  return execFileSync(cmd, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+}
+
+/** Never throws: any git failure yields undefined so callers degrade to a skip. */
+function safeGit(execFn: GitExecFn, args: string[], cwd: string): string | undefined {
+  try {
+    return execFn("git", args, cwd);
+  } catch {
+    return undefined;
+  }
+}
+
+const COMMIT_LEDGER_REL = ".harness/commit-ledger.txt";
+
+/** Best-effort read -- a missing/unreadable ledger is just "nothing seen yet". */
+function commitAlreadyNotified(anchor: string, sha: string): boolean {
+  try {
+    const path = join(anchor, COMMIT_LEDGER_REL);
+    if (!existsSync(path)) return false;
+    return readFileSync(path, "utf8").split("\n").map((l) => l.trim()).includes(sha);
+  } catch {
+    return false;
+  }
+}
+
+/** Best-effort append -- a ledger write failure never blocks the emit path. */
+function markCommitNotified(anchor: string, sha: string): void {
+  try {
+    const path = join(anchor, COMMIT_LEDGER_REL);
+    mkdirSync(dirname(path), { recursive: true });
+    appendFileSync(path, sha + "\n");
+  } catch {
+    // best-effort, see module doc.
+  }
+}
+
+/**
+ * Commit landed: post to worksite (Order N). Reads the commit (default HEAD,
+ * or `opts.sha`) via injectable git -- `log -1 --format=%H%n%s` for the full
+ * sha + subject, `show --shortstat --format=` for the file/insertion/deletion
+ * counts, `rev-parse --abbrev-ref HEAD` for the branch. Dedups by full sha via
+ * `.harness/commit-ledger.txt` so a re-run (the hook fires detached and could
+ * race, or an operator replays `--sha`) never double-posts. Honest-skips with
+ * no notify config (loadCfg) and never throws -- a Slack hiccup must never
+ * touch the commit that triggered it (the hook has already exited by then).
+ */
+export async function emitCommitNotification(
+  manifestPath: string,
+  opts?: { sha?: string; env?: NodeJS.ProcessEnv; fetchFn?: SlackFetch; execFn?: GitExecFn; repoRoot?: string },
+): Promise<void> {
+  try {
+    const loaded = loadCfg(manifestPath);
+    if (!loaded) return;
+    const { venture, cfg } = loaded;
+    const env = opts?.env;
+    const fetchFn = opts?.fetchFn;
+    const repoRoot = opts?.repoRoot ?? dirname(manifestPath);
+    const anchor = dirname(manifestPath);
+    const execFn = opts?.execFn ?? defaultGitExec;
+
+    const logRaw = safeGit(execFn, ["log", "-1", "--format=%H%n%s", opts?.sha ?? "HEAD"], repoRoot);
+    if (!logRaw) return;
+    const [sha, ...subjectLines] = logRaw.split("\n");
+    const subject = subjectLines.join("\n").trim();
+    if (!sha || !subject) return;
+
+    if (commitAlreadyNotified(anchor, sha)) return;
+
+    const statRaw = safeGit(execFn, ["show", "--shortstat", "--format=", sha], repoRoot) ?? "";
+    const statMatch = statRaw.match(/(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/);
+    const filesChanged = statMatch?.[1] !== undefined ? parseInt(statMatch[1], 10) : undefined;
+    const insertions = statMatch?.[2] !== undefined ? parseInt(statMatch[2], 10) : undefined;
+    const deletions = statMatch?.[3] !== undefined ? parseInt(statMatch[3], 10) : undefined;
+
+    const branch = safeGit(execFn, ["rev-parse", "--abbrev-ref", "HEAD"], repoRoot);
+
+    await notify(
+      {
+        kind: "commit",
+        venture,
+        sha,
+        subject,
+        ...(filesChanged !== undefined ? { filesChanged } : {}),
+        ...(insertions !== undefined ? { insertions } : {}),
+        ...(deletions !== undefined ? { deletions } : {}),
+        ...(branch ? { branch } : {}),
+      },
+      cfg,
+      { env, fetchFn },
+    );
+
+    markCommitNotified(anchor, sha);
+  } catch {
+    // belt-and-suspenders: emission never throws, never touches the caller. see module doc.
   }
 }
 

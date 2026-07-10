@@ -17,6 +17,8 @@ const KERNEL_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "kernel")
 export interface KernelMeta {
   readonly kernel: string;
   readonly templates: Record<string, string>;
+  /** Universal skill set every venture gets, sourced from kernel/skills/<name>.md, rendered alongside boot. */
+  readonly defaultSkills?: readonly string[];
 }
 
 export function loadKernel(): KernelMeta {
@@ -106,6 +108,36 @@ function organicZonePacks(anchor: string): Map<number, string> {
   return map;
 }
 
+/**
+ * Resolve a venture's `skills` declaration (paths, or a single-`*` glob, to
+ * SKILL.md-shaped markdown under the anchor) into concrete {name, path} pairs.
+ * A literal path names the skill after its own basename; a glob expands within
+ * its directory (one level, same convention as `readCharters`). A source that
+ * does not exist on disk is dropped, never thrown -- the compile stays best-effort
+ * over a venture's own declaration.
+ */
+function resolveVentureSkills(anchor: string, entries: readonly string[]): Array<{ name: string; path: string }> {
+  const out: Array<{ name: string; path: string }> = [];
+  for (const entry of entries) {
+    if (entry.includes("*")) {
+      const slash = entry.lastIndexOf("/");
+      const dir = slash >= 0 ? entry.slice(0, slash) : ".";
+      const pat = slash >= 0 ? entry.slice(slash + 1) : entry;
+      const rx = new RegExp("^" + pat.replace(/[.+]/g, "\\$&").replace(/\*/g, ".*") + "$");
+      let files: string[];
+      try {
+        files = readdirSync(join(anchor, dir)).filter((f) => rx.test(f)).sort();
+      } catch {
+        continue;
+      }
+      for (const f of files) out.push({ name: basename(f, ".md"), path: join(dir, f) });
+    } else {
+      out.push({ name: basename(entry, ".md"), path: entry });
+    }
+  }
+  return out;
+}
+
 export interface CompileResult {
   readonly outDir: string;
   readonly files: readonly string[];
@@ -120,7 +152,7 @@ export function compileHarness(manifest: VentureManifest, anchor: string, outDir
     const path = join(outDir, rel);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, content);
-    files.push(rel);
+    if (!files.includes(rel)) files.push(rel);
   };
   emit("CLAUDE.base.md", renderTemplate(readFileSync(join(KERNEL_DIR, kernel.templates.contract), "utf8"), ctx));
   const zoneSet = manifest.harness.modules["zone-set"] as { fronts?: number } | undefined;
@@ -138,6 +170,16 @@ export function compileHarness(manifest: VentureManifest, anchor: string, outDir
     }
   }
   emit("skills/boot.md", renderTemplate(readFileSync(join(KERNEL_DIR, kernel.templates.boot), "utf8"), ctx));
+  for (const name of kernel.defaultSkills ?? []) {
+    const src = join(KERNEL_DIR, "skills", `${name}.md`);
+    if (!existsSync(src)) continue;
+    emit(`skills/${name}.md`, renderTemplate(readFileSync(src, "utf8"), ctx));
+  }
+  for (const skill of resolveVentureSkills(anchor, manifest.skills ?? [])) {
+    const src = join(anchor, skill.path);
+    if (!existsSync(src)) continue;
+    emit(`skills/${skill.name}.md`, renderTemplate(readFileSync(src, "utf8"), ctx));
+  }
   emit(
     "compiled.json",
     JSON.stringify(
@@ -191,8 +233,12 @@ function wordCoverage(compiledText: string, organicText: string): number {
   return Math.round((100 * lcsLines(words(compiledText), o)) / o.length);
 }
 
-/** Pair each compiled file with its organic counterpart at the anchor. */
-function organicCounterpart(anchor: string, compiledRel: string): string | null {
+/**
+ * Pair each compiled file with its organic (adopted, live-in-.claude/) counterpart
+ * at the anchor -- the adopter path-map. ANY `skills/<name>.md` (boot, a default
+ * skill, or a venture-declared one) materializes to its own `.claude/skills/<name>/SKILL.md`.
+ */
+export function organicCounterpart(anchor: string, compiledRel: string): string | null {
   if (compiledRel === "CLAUDE.base.md") {
     const p = join(anchor, "CLAUDE.md");
     return existsSync(p) ? p : null;
@@ -202,8 +248,9 @@ function organicCounterpart(anchor: string, compiledRel: string): string | null 
     const p = join(anchor, ".claude", "agents", zone[1]);
     return existsSync(p) ? p : null;
   }
-  if (compiledRel === "skills/boot.md") {
-    const p = join(anchor, ".claude", "skills", "boot", "SKILL.md");
+  const skill = compiledRel.match(/^skills\/(.+)\.md$/);
+  if (skill) {
+    const p = join(anchor, ".claude", "skills", skill[1], "SKILL.md");
     return existsSync(p) ? p : null;
   }
   return null;

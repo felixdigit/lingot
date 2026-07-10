@@ -71,6 +71,32 @@ export const KERNEL_GATE_PATTERNS: Readonly<Record<string, string>> = {
   activation: "--activate|go-live|golive",
 };
 
+/**
+ * Named tool-sets for `harness exec --tools <preset>` -- so common worker shapes
+ * don't require memorizing the exact allow-list. A preset name expands to its
+ * tools; presets and explicit tool names mix freely (e.g. `research,Bash`). The
+ * `research` preset includes ToolSearch on purpose: a headless worker surfaces
+ * WebSearch/WebFetch as DEFERRED tools, so without ToolSearch it literally
+ * cannot load them (the gotcha the first research dispatch hit). Web tools stay
+ * bounded by the token-less/secret-less worker env + the output moderation rail.
+ */
+export const TOOL_PRESETS: Readonly<Record<string, readonly string[]>> = {
+  read: ["Read", "Glob", "Grep", "LS"],
+  build: ["Read", "Glob", "Grep", "LS", "Write", "Edit", "Bash"],
+  research: ["Read", "Glob", "Grep", "LS", "ToolSearch", "WebSearch", "WebFetch"],
+};
+
+/** Expand any preset names in a --tools list to their tools; dedup, order-stable. */
+export function expandToolPresets(tools: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const t of tools) {
+    const preset = TOOL_PRESETS[t];
+    if (preset) { for (const p of preset) if (!out.includes(p)) out.push(p); }
+    else if (!out.includes(t)) out.push(t);
+  }
+  return out;
+}
+
 export const KERNEL_DEFAULTS: Partial<HarnessManifest> = {
   loop: { anchor: "claude-agent-sdk", boundary: "acp" },
   routing: { tiers: ["reason", "scoped", "mechanical"], default: "scoped", gateway: "litellm" },

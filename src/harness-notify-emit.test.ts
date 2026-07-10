@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { mkdtempSync, writeFileSync, mkdirSync, utimesSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, utimesSync, existsSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { emitExecNotifications, emitRouteNotifications, emitDriftNotifications } from "./harness-notify-emit";
+import { emitExecNotifications, emitRouteNotifications, emitDriftNotifications, emitCommitNotification } from "./harness-notify-emit";
 
 const withToken: NodeJS.ProcessEnv = { SLACK_BOT_TOKEN: "xoxb-test" };
 
@@ -189,5 +189,81 @@ describe("emitDriftNotifications", () => {
     const path = join(dir, "harness.json");
     writeFileSync(path, "{not json");
     await expect(emitDriftNotifications(path, { suite: "x" }, { env: withToken })).resolves.toBeUndefined();
+  });
+});
+
+/** A fake injectable git exec: returns canned output per git subcommand, ignores real cwd/state. */
+function fakeGitExec(fullSha: string, subject: string, statLine: string, branch: string) {
+  return (_cmd: string, args: string[], _cwd: string): string => {
+    if (args[0] === "log") return `${fullSha}\n${subject}`;
+    if (args[0] === "show") return statLine;
+    if (args[0] === "rev-parse") return branch;
+    throw new Error(`unexpected git ${args.join(" ")}`);
+  };
+}
+
+describe("emitCommitNotification", () => {
+  it("posts HEAD to worksite with sha7/subject/stat/branch", async () => {
+    const { dir, path } = tmpManifest({ slack: { worksite: "C_WORKSITE", ops: "C_OPS" } });
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ ok: true, ts: "3.3", channel: "C_WORKSITE" }));
+    const execFn = fakeGitExec(
+      "abc1234def5678900000000000000000000000",
+      "feat(agency): add lead scorer",
+      " 3 files changed, 42 insertions(+), 7 deletions(-)",
+      "main",
+    );
+    await emitCommitNotification(path, { env: withToken, fetchFn, execFn, repoRoot: dir });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchFn.mock.calls[0][1].body);
+    expect(body.channel).toBe("C_WORKSITE");
+    expect(body.text).toContain("abc1234");
+    expect(body.text).not.toContain("abc1234def5678900000000000000000000000");
+    expect(body.text).toContain("feat(agency): add lead scorer");
+    expect(body.text).toContain("3 files");
+    expect(body.text).toContain("+42/-7");
+    expect(body.text).toContain("main");
+  });
+
+  it("no notify block -> zero calls (honest-skip)", async () => {
+    const { dir, path } = tmpManifest();
+    const fetchFn = vi.fn();
+    const execFn = fakeGitExec("1111111111111111111111111111111111111", "feat: x", "", "main");
+    await emitCommitNotification(path, { env: withToken, fetchFn, execFn, repoRoot: dir });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("dedups by sha -- a second call for the same sha does not post again", async () => {
+    const { dir, path } = tmpManifest({ slack: { worksite: "C_WORKSITE", ops: "C_OPS" } });
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ ok: true, ts: "4.4", channel: "C_WORKSITE" }));
+    const execFn = fakeGitExec(
+      "deadbeef000000000000000000000000000000",
+      "chore: bump",
+      " 1 file changed, 1 insertion(+)",
+      "main",
+    );
+    await emitCommitNotification(path, { env: withToken, fetchFn, execFn, repoRoot: dir });
+    await emitCommitNotification(path, { env: withToken, fetchFn, execFn, repoRoot: dir });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    const ledgerPath = join(dir, ".harness", "commit-ledger.txt");
+    expect(existsSync(ledgerPath)).toBe(true);
+    expect(readFileSync(ledgerPath, "utf8")).toContain("deadbeef");
+  });
+
+  it("never throws against a missing manifest", async () => {
+    const fetchFn = vi.fn();
+    await expect(
+      emitCommitNotification("/nonexistent/harness.json", { env: withToken, fetchFn }),
+    ).resolves.toBeUndefined();
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("never throws when git fails (execFn throws) -- skip, no post", async () => {
+    const { path } = tmpManifest({ slack: { worksite: "C_WORKSITE" } });
+    const fetchFn = vi.fn();
+    const execFn = () => {
+      throw new Error("not a git repo");
+    };
+    await expect(emitCommitNotification(path, { env: withToken, fetchFn, execFn })).resolves.toBeUndefined();
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 });

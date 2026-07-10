@@ -95,6 +95,8 @@ export interface VentureManifest {
   };
   /** Studio-kind manifests only: where in-repo ventures anchor + the registry dir. */
   readonly studio?: { readonly scan: readonly string[]; readonly registry: string };
+  /** Venture-specific skill sources beyond the kernel's defaultSkills: paths (or a single-`*` glob) to SKILL.md-shaped markdown, relative to the anchor. */
+  readonly skills?: readonly string[];
 }
 
 export interface ManifestLoadResult {
@@ -160,6 +162,11 @@ export function loadVentureManifest(path: string): ManifestLoadResult {
   if (m.repo !== undefined) {
     if (typeof m.repo !== "object" || m.repo === null || typeof m.repo.github !== "string" || m.repo.github.length === 0) {
       errors.push(`${path}: repo block must carry a non-empty github (owner/name)`);
+    }
+  }
+  if (m.skills !== undefined) {
+    if (!Array.isArray(m.skills) || m.skills.some((s) => typeof s !== "string")) {
+      errors.push(`${path}: skills must be an array of strings (paths or a single-* glob to venture skill sources)`);
     }
   }
   return errors.length > 0 ? { errors } : { manifest: m, errors: [] };

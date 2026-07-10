@@ -6,5 +6,6 @@
     "contract": "contract-base.md",
     "pack": "pack-template.md",
     "boot": "boot-skill.md"
-  }
+  },
+  "defaultSkills": ["research", "verify", "craft", "artifact", "plan", "git"]
 }
