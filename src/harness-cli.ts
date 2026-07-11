@@ -39,6 +39,7 @@ import { fireEligible } from "./harness-cron";
 import { driftCycle, sweepDrift } from "./harness-recompile";
 import { railsActive, moderationCheck } from "./harness-rails";
 import { recordDispatch, readUsage, summarizeUsage, formatUsage } from "./harness-usage";
+import { recordAgentStop } from "./harness-agent-usage";
 import { KERNEL_TIER_REGISTRY, KERNEL_DEFAULTS, expandToolPresets } from "./harness-kernel";
 import { loadHarnessManifest } from "./harness-manifest";
 import { resolveProject } from "./harness-merge";
@@ -92,6 +93,7 @@ function usage(): never {
       "  harness ask --tier <alias> \"<prompt>\"                          (lean: direct model call, no agent context)",
       "  harness batch --tier <alias> --file <tasks.txt> [--out <dir>]   (lean fan-out)",
       "  harness usage [dir] [--fleet] [--tail <n>]   (spend + accepted, per tier / per venture / last n)",
+      "  harness record-agent [--dir <root>] [--transcript <path>]   (SubagentStop hook sink -- ledger a finished Agent-tool dispatch; payload on stdin)",
       "  harness audit [dir] [--tail <n>]   (the gate's allow/deny/held decision trail)",
       '  harness post <file> [--channel <C...|#name|worksite|ops|telemetry>] [--say "caption"] [--dir <venture>]   (post a file to Slack)',
       "  harness slack listen [dir]   (Socket Mode two-way listener -- fail-closed w/o SLACK_APP_TOKEN + SLACK_OPERATOR_ID)",
@@ -416,6 +418,31 @@ if (command === "boot" || command === "adopt") {
       console.log(`    ${d.at}  ${d.tier.padEnd(10)} ${String(d.model).slice(0, 18).padEnd(18)} ${d.role.padEnd(8)} exit=${d.exit} ${d.inTokens ?? 0}in/${d.outTokens ?? 0}out $${(d.costUsd ?? 0).toFixed(5)}`);
     }
   }
+  process.exit(0);
+} else if (command === "record-agent") {
+  // SubagentStop hook sink (docs/harness/15, agent-path slice): ledger the
+  // finished subagent's usage. Payload arrives on stdin (Claude Code hook JSON);
+  // --transcript overrides for manual/backfill runs. Always exits 0 -- telemetry
+  // must never break a hook chain.
+  const dirIdx = args.indexOf("--dir");
+  const trIdx = args.indexOf("--transcript");
+  let payload: { transcript_path?: string; cwd?: string; agent_type?: string; agent_id?: string } = {};
+  if (trIdx === -1) {
+    try {
+      const stdin = readFileSync(0, "utf8");
+      if (stdin.trim()) payload = JSON.parse(stdin);
+    } catch {
+      /* no/bad stdin -- fall through to flags */
+    }
+  }
+  const transcript = trIdx !== -1 ? args[trIdx + 1] : payload.transcript_path;
+  const root = dirIdx !== -1 ? args[dirIdx + 1] : (payload.cwd ?? process.env.CLAUDE_PROJECT_DIR ?? process.cwd());
+  if (!transcript) {
+    console.error("record-agent: no transcript path (stdin payload or --transcript)");
+    process.exit(0);
+  }
+  const res = recordAgentStop(root, transcript, payload.agent_type);
+  console.error(`record-agent: ${res.records.length} record(s), ${res.bytesProcessed} bytes -- ${res.note}`);
   process.exit(0);
 } else if (command === "audit") {
   // The gate's decision trail, human-readable -- what was allowed/denied/held.

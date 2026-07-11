@@ -21,6 +21,10 @@ export interface DispatchRecord {
   readonly inTokens?: number;
   readonly outTokens?: number;
   readonly costUsd?: number;
+  /** Where the dispatch ran: harness CLI (default when absent) or the Agent-tool path (SubagentStop hook). */
+  readonly source?: "cli" | "agent";
+  /** Short human tag (agent transcript basename, batch label, ...). */
+  readonly label?: string;
 }
 
 /** Estimated cost in USD from token counts + the tier's per-million price. */
@@ -88,6 +92,9 @@ export interface UsageSummary {
   /** Accepted (exit 0) dispatches per tier -- an output only counts once it passed verify. */
   readonly acceptedByTier: Readonly<Record<string, number>>;
   readonly totalAccepted: number;
+  /** Dispatch + cost split by source path (cli = harness CLI, agent = Agent-tool via SubagentStop). */
+  readonly bySource: { cli: number; agent: number };
+  readonly costBySource: { cli: number; agent: number };
 }
 
 export function summarizeUsage(records: readonly DispatchRecord[]): UsageSummary {
@@ -95,6 +102,8 @@ export function summarizeUsage(records: readonly DispatchRecord[]): UsageSummary
   const costByTier: Record<string, number> = {};
   const acceptedByTier: Record<string, number> = {};
   const byRole = { judgment: 0, labor: 0 };
+  const bySource = { cli: 0, agent: 0 };
+  const costBySource = { cli: 0, agent: 0 };
   let totalCostUsd = 0;
   let totalAccepted = 0;
   for (const r of records) {
@@ -108,8 +117,11 @@ export function summarizeUsage(records: readonly DispatchRecord[]): UsageSummary
     }
     if (r.role === "judgment") byRole.judgment += 1;
     else byRole.labor += 1;
+    const src = r.source === "agent" ? "agent" : "cli";
+    bySource[src] += 1;
+    costBySource[src] += c;
   }
-  return { total: records.length, byTier, byRole, totalCostUsd, costByTier, acceptedByTier, totalAccepted };
+  return { total: records.length, byTier, byRole, totalCostUsd, costByTier, acceptedByTier, totalAccepted, bySource, costBySource };
 }
 
 /** Cost per ACCEPTED change (the Kopadze metric): total cost / verified-accepted outputs. */
@@ -130,5 +142,10 @@ export function formatUsage(s: UsageSummary): string {
   }
   const pctLabor = Math.round((s.byRole.labor / s.total) * 100);
   lines.push(`  -- ${pctLabor}% labor / ${100 - pctLabor}% judgment; cost-per-ACCEPTED-change is the metric (failed cheap dispatches raise it)`);
+  if (s.bySource.agent > 0) {
+    lines.push(
+      `  -- source: ${s.bySource.cli} cli (${usd(s.costBySource.cli)}) / ${s.bySource.agent} agent-tool (${usd(s.costBySource.agent)} est-if-API; subscription runs bill $0 in practice)`,
+    );
+  }
   return lines.join("\n");
 }
